@@ -1,0 +1,54 @@
+package com.althmany.extractor.engine
+
+import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Process-local single-operation gate.
+ *
+ * Accessibility events are shared by extraction, scan and publish. Without an atomic gate two UI
+ * actions started at nearly the same moment could both pass their individual state checks. This
+ * coordinator guarantees that only one engine owns the WhatsApp UI at a time.
+ */
+enum class RuntimeOperation(val labelAr: String) {
+    SENDER("الانضمام"),
+    EXTRACTION("الاستخراج"),
+    SCAN("الفحص"),
+    PUBLISH("النشر")
+}
+
+object RuntimeOperationCoordinator {
+    private val owner = AtomicReference<RuntimeOperation?>(null)
+
+    fun tryAcquire(operation: RuntimeOperation): Boolean {
+        // Strict single-owner gate. Sync and Extraction both use EXTRACTION,
+        // so the same enum may not re-enter while it already owns WhatsApp UI.
+        return owner.compareAndSet(null, operation)
+    }
+
+    /**
+     * Idempotent ownership restoration for a persisted runtime such as Sender. Android may recreate
+     * its Accessibility service while the explicit batch is still active, so the same owner may
+     * safely reassert the lease. A different active owner is never displaced.
+     */
+    fun ensureOwned(operation: RuntimeOperation): Boolean {
+        val current = owner.get()
+        if (current == operation) return true
+        return owner.compareAndSet(null, operation)
+    }
+
+    fun release(operation: RuntimeOperation) {
+        owner.compareAndSet(operation, null)
+    }
+
+    fun current(): RuntimeOperation? = owner.get()
+
+    fun isOwnedByOther(operation: RuntimeOperation): Boolean {
+        val current = owner.get()
+        return current != null && current != operation
+    }
+
+    // Pure regression checks only; production code should release its own operation explicitly.
+    internal fun resetForTests() {
+        owner.set(null)
+    }
+}
