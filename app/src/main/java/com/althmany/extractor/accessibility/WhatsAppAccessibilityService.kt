@@ -102,6 +102,9 @@ class WhatsAppAccessibilityService : AccessibilityService() {
 
     private fun routeEvent(packageName: String?) {
         when (RuntimeOperationCoordinator.current()) {
+            // Sender owns WhatsApp UI independently. Extractor must not route
+            // Sender accessibility events into extraction, scan or publish.
+            RuntimeOperation.SENDER -> Unit
             RuntimeOperation.EXTRACTION -> ExtractionController.notifyUiEvent(packageName)
             RuntimeOperation.SCAN -> ScanController.notifyUiEvent(packageName)
             RuntimeOperation.PUBLISH -> PublishController.notifyUiEvent(packageName)

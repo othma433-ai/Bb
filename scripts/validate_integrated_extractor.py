@@ -48,6 +48,7 @@ extraction=text('app/src/main/java/com/althmany/extractor/engine/ExtractionContr
 scan=text('app/src/main/java/com/althmany/extractor/engine/ScanController.kt')
 publish=text('app/src/main/java/com/althmany/extractor/engine/PublishController.kt')
 ui_adapter=text('app/src/main/java/com/althmany/extractor/engine/WhatsAppUiAdapter.kt')
+accessibility=text('app/src/main/java/com/althmany/extractor/accessibility/WhatsAppAccessibilityService.kt')
 app_prefs=text('app/src/main/java/com/althmany/groupmanager/data/AppPreferences.kt')
 quick_join=text('app/src/main/java/com/althmany/groupmanager/accessibility/QuickJoinAccessibilityService.kt')
 shizuku_sender=text('app/src/main/java/com/althmany/groupmanager/shizuku/ShizukuAutomationService.kt')
@@ -81,6 +82,7 @@ checks={
     '4.0 extraction Sender guards': extraction.count('SenderRuntimeGuard.isSenderRunning(appContext)') >= 3,
     '4.0 scan Sender guard': scan.count('SenderRuntimeGuard.isSenderRunning(appContext)') >= 1,
     '4.0 publish Sender guards': publish.count('SenderRuntimeGuard.isSenderRunning(appContext)') >= 2,
+    '4.0 Sender route isolation': 'RuntimeOperation.SENDER -> Unit' in accessibility,
     '4.0 pure conversation title policy': 'object ConversationTitlePolicy' in text('app/src/main/java/com/althmany/extractor/engine/ConversationTitlePolicy.kt'),
     '4.0 adapter uses title policy': 'ConversationTitlePolicy.isCandidate(value)' in ui_adapter,
 }
