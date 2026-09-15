@@ -171,7 +171,7 @@ jobs:
           sha256sum "$APK" | tee app-debug.apk.sha256
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: al-thmany-debug-apk
           path: |
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload test and lint reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-reports
           path: |
