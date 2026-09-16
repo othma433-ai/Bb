@@ -269,10 +269,10 @@ private fun PControls(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            PControl("بدء", Icons.Default.PlayArrow, PCyan, startEnabled && !running && !paused, Modifier.weight(1f), onStart)
-            PControl("إيقاف مؤقت", Icons.Default.Pause, POrange, running && !paused, Modifier.weight(1f), onPause)
-            PControl("استكمال", Icons.Default.Refresh, PBlue, paused, Modifier.weight(1f), onResume)
             PControl("إيقاف نهائي", Icons.Default.Stop, PRed, running || paused, Modifier.weight(1f), onStop)
+            PControl("استكمال", Icons.Default.Refresh, PBlue, paused, Modifier.weight(1f), onResume)
+            PControl("إيقاف مؤقت", Icons.Default.Pause, POrange, running && !paused, Modifier.weight(1f), onPause)
+            PControl("بدء", Icons.Default.PlayArrow, PCyan, startEnabled && !running && !paused, Modifier.weight(1f), onStart)
         }
     }
 }
@@ -514,6 +514,7 @@ fun ProfessionalScanScreen(
     onExport: (ExportFormat) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    var resultsExpanded by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -593,41 +594,14 @@ fun ProfessionalScanScreen(
                         textAlign = TextAlign.End
                     )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ScanSpeedProfile.entries.forEach { speed ->
-                            PChoice(
-                                speed.labelAr,
-                                scan.speed == speed,
-                                PCyan,
-                                Modifier.weight(1f)
-                            ) { onSpeed(speed) }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
                     Text(
-                        "عدد محاولات التحقق",
-                        color = PMuted,
+                        "الأداء الموحد: فائق • فحص واحد لكل رابط • بدون إعادة فتح تلقائية",
+                        color = PCyan,
                         fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
-                    Spacer(Modifier.height(5.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        (1..5).forEach { count ->
-                            PChoice(
-                                count.toString(),
-                                scan.maxAttempts == count,
-                                PCyan,
-                                Modifier.weight(1f)
-                            ) { onAttempts(count) }
-                        }
-                    }
                 }
             }
 
@@ -672,18 +646,23 @@ fun ProfessionalScanScreen(
                     PCard {
                         PSectionTitle("نتائج الفحص", Icons.Default.Search)
                         Spacer(Modifier.height(8.dp))
-                        ScanResultOrganizer.sorted(scanItems).take(20).forEach { record ->
+                        val ordered = ScanResultOrganizer.sorted(scanItems)
+                        val visible = if (resultsExpanded) ordered else ordered.take(4)
+                        visible.forEach { record ->
                             PScanResultRow(record)
                             Spacer(Modifier.height(6.dp))
                         }
-                        if (scanItems.size > 20) {
-                            Text(
-                                "يتم عرض أحدث 20 نتيجة من ${scanItems.size}",
-                                color = PMuted,
-                                fontSize = 12.sp,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.End
-                            )
+                        if (ordered.size > 4) {
+                            TextButton(
+                                onClick = { resultsExpanded = !resultsExpanded },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    if (resultsExpanded) "عرض أقل" else "عرض المزيد (${ordered.size - 4})",
+                                    color = PCyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

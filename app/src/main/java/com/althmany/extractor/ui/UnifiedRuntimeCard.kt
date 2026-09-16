@@ -135,7 +135,7 @@ fun UnifiedRuntimeCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(localTargets, key = { "local:${it.packageName}" }) { target ->
+                    items(localTargets.reversed(), key = { "local:${it.packageName}" }) { target ->
                         TargetTile(
                             title = target.labelAr,
                             environment = runtime.profileInfo.labelAr,
@@ -148,7 +148,7 @@ fun UnifiedRuntimeCard(
                     }
 
                     if (onRemoteTarget != null) {
-                        items(remoteTargets, key = { "remote:${it.stableKey}" }) { target ->
+                        items(remoteTargets.reversed(), key = { "remote:${it.stableKey}" }) { target ->
                             TargetTile(
                                 title = target.whatsappLabel,
                                 environment = target.environmentLabel,
@@ -186,7 +186,7 @@ fun UnifiedRuntimeCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                RuntimeBackendPreference.entries.forEach { backend ->
+                RuntimeBackendPreference.entries.reversed().forEach { backend ->
                     RuntimeChoice(
                         label = backend.labelAr,
                         selected = runtime.preference == backend,

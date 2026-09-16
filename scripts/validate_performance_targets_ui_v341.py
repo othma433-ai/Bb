@@ -80,8 +80,14 @@ checks = {
 
     "one selector includes local and remote WhatsApp":
         "val localTargets = engine.availableWhatsApp" in card
-        and 'items(localTargets, key = { "local:${it.packageName}" })' in card
-        and 'items(remoteTargets, key = { "remote:${it.stableKey}" })' in card
+        and (
+            'items(localTargets, key = { "local:${it.packageName}" })' in card
+            or 'items(localTargets.reversed(), key = { "local:${it.packageName}" })' in card
+        )
+        and (
+            'items(remoteTargets, key = { "remote:${it.stableKey}" })' in card
+            or 'items(remoteTargets.reversed(), key = { "remote:${it.stableKey}" })' in card
+        )
         and '"جميع نسخ واتساب"' in card,
 
     "all known WhatsApp types remain discoverable":

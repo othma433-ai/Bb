@@ -7,6 +7,7 @@ import com.althmany.extractor.ExtractorFeatureRuntime
 import com.althmany.groupmanager.GroupManagerApp
 import com.althmany.groupmanager.model.PreferredTarget
 import com.althmany.groupmanager.model.AutomationBackend
+import com.althmany.groupmanager.domain.RuntimeSpeedMode
 import com.althmany.groupmanager.util.WhatsAppLauncher
 import com.althmany.extractor.profile.RuntimeBackendPreference
 import com.althmany.extractor.profile.UnifiedRemoteTarget
@@ -255,10 +256,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    private fun applyUnifiedPerformanceProfile() {
+        // Fastest supported pacing for every engine; reliability retry policies stay engine-owned.
+        ExtractionController.setSpeed(SpeedProfile.HYPER)
+        ExtractionController.setBetweenItemsDelayMs(0L)
+
+        ScanController.setSpeed(ScanSpeedProfile.HYPER)
+        ScanController.setMaxAttempts(1)
+
+        PublishController.setSpeed(PublishSpeedProfile.INSTANT)
+
+        (getApplication<Application>() as? GroupManagerApp)?.preferences?.apply {
+            runtimeSpeedMode = RuntimeSpeedMode.MAX
+            fastHandsFreeMode = true
+            interLinkDelayMs = 0
+            autoAdvance = true
+        }
+    }
+
     fun startExtractionSmart() {
         if (globalJob?.isActive == true) return
         viewModelScope.launch {
             if (!prepareExplicitOperation("EXTRACTION")) return@launch
+            applyUnifiedPerformanceProfile()
             if (ensureGroupsReady()) ExtractionController.start()
         }
     }
@@ -277,6 +297,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (!prepareExplicitOperation("SCAN")) return@launch
+            applyUnifiedPerformanceProfile()
             // 3.4.1: Scan classifies only. Membership actions belong to original Sender/Join.
             ScanController.setActionMode(ScanActionMode.SCAN_ONLY)
             ScanController.setRequestToJoinEnabled(false)
@@ -292,6 +313,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (!prepareExplicitOperation("PUBLISH")) return@launch
+            applyUnifiedPerformanceProfile()
             PublishController.start(message)
         }
     }
@@ -346,6 +368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         globalJob = viewModelScope.launch {
+            applyUnifiedPerformanceProfile()
             if (!ensureGroupsReady()) return@launch
 
             _message.value = "1/4 • القروبات جاهزة — بدء الاستخراج"

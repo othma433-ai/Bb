@@ -14,6 +14,7 @@ import com.althmany.groupmanager.domain.AutomationPolicy
 import com.althmany.groupmanager.domain.AutomationStopReason
 import com.althmany.groupmanager.domain.NativeEngineSetupAction
 import com.althmany.groupmanager.domain.RestrictionHandlingMode
+import com.althmany.groupmanager.domain.RuntimeSpeedMode
 import com.althmany.groupmanager.domain.SessionRules
 import com.althmany.groupmanager.model.AutomationBackend
 import com.althmany.groupmanager.model.LinkSource
@@ -187,13 +188,17 @@ class OriginalJoinCoordinator(
     }
 
     private fun configureRunPreferences() {
+        // Unified high-performance profile. Safety semantics stay unchanged:
+        // genuine user exit can still pause, while controlled X/Back remains engine-owned.
         prefs.runtimeShadowMode = false
         prefs.autoAdvance = true
         prefs.autoPauseOutsideWhatsApp = true
         prefs.autoResumeCurrentRun = false
         prefs.keepScreenAwake = true
+        prefs.fastHandsFreeMode = true
+        prefs.runtimeSpeedMode = RuntimeSpeedMode.MAX
         prefs.restrictionHandlingMode = RestrictionHandlingMode.SKIP_AND_CONTINUE
-        prefs.interLinkDelayMs = prefs.runtimeSpeedProfile().interLinkDelayMs.toInt()
+        prefs.interLinkDelayMs = 0
         prefs.accessibilityActionTimeoutSeconds = AutomationPolicy.FAST_ACTION_TIMEOUT_SECONDS
     }
 

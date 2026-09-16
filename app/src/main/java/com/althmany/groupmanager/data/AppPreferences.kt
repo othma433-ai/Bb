@@ -363,8 +363,8 @@ class AppPreferences(context: Context) {
 
     fun setRemoteSecureTarget(userId: Int, packageName: String, label: String?) {
         require(userId >= 0) { "Remote Secure user id must be non-negative." }
-        require(packageName in setOf("com.whatsapp", "com.whatsapp.w4b", "com.whatsapp2")) {
-            "Unsupported Remote Secure WhatsApp package."
+        require(Regex("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").matches(packageName)) {
+            "Unsafe Android package name."
         }
         preferences.edit()
             .putBoolean(KEY_REMOTE_SECURE_ENABLED, true)

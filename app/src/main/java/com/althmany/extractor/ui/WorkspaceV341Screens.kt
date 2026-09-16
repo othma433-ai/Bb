@@ -214,10 +214,10 @@ private fun VControls(
         VTitle("التحكم السريع", Icons.Default.Bolt)
         Spacer(Modifier.height(7.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            VControl("بدء", Icons.Default.PlayArrow, VCyan, startEnabled && !running && !paused, Modifier.weight(1f), onStart)
-            VControl("إيقاف مؤقت", Icons.Default.Pause, VOrange, running && !paused, Modifier.weight(1f), onPause)
-            VControl("استكمال", Icons.Default.Refresh, VBlue, paused, Modifier.weight(1f), onResume)
             VControl("إيقاف نهائي", Icons.Default.Stop, VRed, running || paused, Modifier.weight(1f), onStop)
+            VControl("استكمال", Icons.Default.Refresh, VBlue, paused, Modifier.weight(1f), onResume)
+            VControl("إيقاف مؤقت", Icons.Default.Pause, VOrange, running && !paused, Modifier.weight(1f), onPause)
+            VControl("بدء", Icons.Default.PlayArrow, VCyan, startEnabled && !running && !paused, Modifier.weight(1f), onStart)
         }
     }
 }
@@ -259,7 +259,7 @@ fun V341BottomBar(current: AppScreen, onNavigate: (AppScreen) -> Unit) {
         Triple(AppScreen.LOGS, "التشخيص", Icons.Default.Settings)
     )
     NavigationBar(containerColor = Color(0xFF061520), tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
-        entries.forEach { (screen, label, icon) ->
+        entries.reversed().forEach { (screen, label, icon) ->
             NavigationBarItem(
                 selected = current == screen,
                 onClick = { onNavigate(screen) },
@@ -614,11 +614,13 @@ fun V341ExtractionScreen(
                     VChoice("عميق", engine.mode == ExtractionMode.DEEP, VBlue, Modifier.weight(1f)) { onMode(ExtractionMode.DEEP) }
                 }
                 Spacer(Modifier.height(7.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(listOf(SpeedProfile.ADAPTIVE, SpeedProfile.SMART, SpeedProfile.HYPER, SpeedProfile.SAFE)) { speed ->
-                        VChoice(speed.labelAr, engine.speed == speed, VCyan, Modifier.width(108.dp)) { onSpeed(speed) }
-                    }
-                }
+                Text(
+                    "الأداء الموحد: HyperDrive • انتقال فوري مع بقاء منطق التعافي",
+                    color = VCyan,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.End
+                )
             }
         }
         item {
@@ -963,11 +965,13 @@ fun V341PublishScreen(
             VCard {
                 VTitle("إعدادات النشر", Icons.Default.Settings)
                 Spacer(Modifier.height(7.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(PublishSpeedProfile.entries) { speed ->
-                        VChoice(speed.labelAr, publish.speed == speed, VCyan, Modifier.width(110.dp)) { onSpeed(speed) }
-                    }
-                }
+                Text(
+                    "الأداء الموحد: فوري • بدون تأخير اصطناعي بين القروبات",
+                    color = VCyan,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.End
+                )
             }
         }
         item {

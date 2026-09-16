@@ -142,6 +142,7 @@ fun V341DiagnosticsScreen(padding: PaddingValues, onSettings: () -> Unit) {
     val context = LocalContext.current
     var snapshot by remember { mutableStateOf(captureV341Diagnostics(context)) }
     var status by remember { mutableStateOf("") }
+    var journalExpanded by remember { mutableStateOf(false) }
 
     val export = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
@@ -268,14 +269,30 @@ fun V341DiagnosticsScreen(padding: PaddingValues, onSettings: () -> Unit) {
             item {
                 DCard {
                     DTitle("سجل Runtime الأخير")
+                    val lines = snapshot.recentLog.lineSequence()
+                        .filter { it.isNotBlank() }
+                        .toList()
+                    val shown = if (journalExpanded) lines else lines.take(4)
                     Text(
-                        snapshot.recentLog.ifBlank { "لا توجد سجلات حتى الآن" },
+                        shown.joinToString("\n").ifBlank { "لا توجد سجلات حتى الآن" },
                         color = DText,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Start
                     )
+                    if (lines.size > 4) {
+                        TextButton(
+                            onClick = { journalExpanded = !journalExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (journalExpanded) "عرض أقل" else "عرض المزيد (${lines.size - 4})",
+                                color = DCyan,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
 

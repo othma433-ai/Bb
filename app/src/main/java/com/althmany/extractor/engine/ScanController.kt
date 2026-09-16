@@ -132,7 +132,10 @@ object ScanController {
             return false
         }
 
-        if (preference != RuntimeBackendPreference.SHIZUKU && !runtimeTarget.remoteTarget) {
+        // Do not spend the Accessibility grace window when AUTO already resolved to Shizuku.
+        if (runtimeTarget.effectiveBackend == com.althmany.extractor.profile.RuntimeBackendKind.ACCESSIBILITY &&
+            !runtimeTarget.remoteTarget
+        ) {
             val accessDeadline = SystemClock.elapsedRealtime() + minOf(timeoutMs, 1_800L)
             while (SystemClock.elapsedRealtime() < accessDeadline) {
                 val live = recoverLiveService()
@@ -235,10 +238,12 @@ object ScanController {
 
     fun start() {
         if (job?.isActive == true) return
-        // Scan is permanently read-only in the unified 3.4.1 workspace. Older persisted
-        // JOIN_ONLY / SCAN_AND_JOIN values must never leak into a Scan run.
+        // Scan is permanently read-only and single-pass in the unified 3.4.1 workspace.
+        // Old persisted UI preferences cannot make a new scan slower or repeat the same URL.
         setActionMode(ScanActionMode.SCAN_ONLY)
         setRequestToJoinEnabled(false)
+        setSpeed(ScanSpeedProfile.HYPER)
+        setMaxAttempts(1)
         if (SenderRuntimeGuard.isSenderRunning(appContext)) {
             _state.value = _state.value.copy(status = ScanEngineStatus.ERROR, message = "أوقف تشغيل Sender الحالي أولاً قبل تشغيل الفحص")
             return
@@ -681,7 +686,7 @@ object ScanController {
         while (SystemClock.elapsedRealtime() < deadline) {
             val tree = shizukuUi.snapshot(packageName)
             if (tree.state == "OK" && tree.nodes.isNotEmpty() && shizukuUi.isWhatsApp(tree, packageName)) return tree
-            delay(75L)
+            delay(45L)
         }
         return null
     }
@@ -819,14 +824,14 @@ object ScanController {
         val packageName = ExtractionController.state.value.selectedWhatsAppPackage ?: return
         val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, packageName)
         if (shizukuMode) {
-            val tree = awaitShizukuTree(packageName, 350L)
+            val tree = awaitShizukuTree(packageName, 180L)
             if (tree != null && shizukuUi.clickInviteClose(tree, packageName)) {
                 delay(maxOf(speed.settleDelayMs, 18L))
                 return
             }
             ShizukuBridge.fastBack(appContext)
             delay(maxOf(speed.settleDelayMs, 18L))
-            val after = awaitShizukuTree(packageName, 350L)
+            val after = awaitShizukuTree(packageName, 180L)
             if (after == null || !shizukuUi.isWhatsApp(after, packageName)) {
                 ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)
             }
