@@ -54,7 +54,7 @@ private fun VCard(
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.85f))
     ) {
-        Column(Modifier.padding(10.dp), content = content)
+        Column(Modifier.padding(14.dp), content = content)
     }
 }
 
@@ -65,7 +65,7 @@ private fun VTitle(title: String, icon: ImageVector, tint: Color = VCyan) {
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = VText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = VText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(6.dp))
         Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
     }
@@ -85,7 +85,7 @@ private fun VHeader(title: String, subtitle: String, engine: ExtractionUiState, 
                 Text(
                     "إدارة الروابط، الانضمام، الاستخراج، الفحص، النشر",
                     color = VMuted,
-                    fontSize = 9.sp
+                    fontSize = 11.sp
                 )
             }
             Icon(Icons.Default.Settings, null, tint = VText, modifier = Modifier.size(24.dp))
@@ -151,7 +151,7 @@ private fun VStatus(label: String, value: String, good: Boolean, modifier: Modif
     ) {
         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, color = VText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text(value, color = if (good) VGreen else VMuted, fontSize = 9.sp)
+            Text(value, color = if (good) VGreen else VMuted, fontSize = 11.sp)
         }
     }
 }
@@ -174,7 +174,7 @@ private fun VChoice(
             Text(
                 label,
                 color = if (selected) tint else VText,
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2
@@ -193,7 +193,7 @@ private fun VStat(label: String, value: String, tint: Color, modifier: Modifier)
     ) {
         Column(Modifier.padding(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = tint, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-            Text(label, color = VText, fontSize = 8.sp, textAlign = TextAlign.Center, maxLines = 2)
+            Text(label, color = VText, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2)
         }
     }
 }
@@ -241,7 +241,7 @@ private fun VControl(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(icon, null, tint = if (enabled) tint else VMuted, modifier = Modifier.size(17.dp))
-            Text(label, color = if (enabled) VText else VMuted, fontSize = 8.sp)
+            Text(label, color = if (enabled) VText else VMuted, fontSize = 10.sp)
         }
     }
 }
@@ -254,7 +254,7 @@ fun V341BottomBar(current: AppScreen, onNavigate: (AppScreen) -> Unit) {
         Triple(AppScreen.EXTRACT, "الاستخراج", Icons.Default.Download),
         Triple(AppScreen.SCAN, "الفحص", Icons.Default.Search),
         Triple(AppScreen.PUBLISH, "النشر", Icons.Default.Send),
-        Triple(AppScreen.SETTINGS, "الإعدادات", Icons.Default.Settings)
+        Triple(AppScreen.LOGS, "التشخيص", Icons.Default.Settings)
     )
     NavigationBar(containerColor = Color(0xFF061520), tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
         entries.forEach { (screen, label, icon) ->
@@ -262,7 +262,7 @@ fun V341BottomBar(current: AppScreen, onNavigate: (AppScreen) -> Unit) {
                 selected = current == screen,
                 onClick = { onNavigate(screen) },
                 icon = { Icon(icon, null, modifier = Modifier.size(19.dp)) },
-                label = { Text(label, fontSize = 8.sp) },
+                label = { Text(label, fontSize = 10.sp) },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = VCyan,
                     selectedTextColor = VCyan,
@@ -310,7 +310,7 @@ fun V341HomeScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item { VHeader("مرحباً بك", "كل ما تحتاجه لإدارة مجموعاتك في مكان واحد", engine, Icons.Default.Home) }
@@ -369,7 +369,7 @@ private fun VFeature(
             Icon(icon, null, tint = tint, modifier = Modifier.size(31.dp))
             Spacer(Modifier.height(8.dp))
             Text(title, color = VText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = VMuted, fontSize = 9.sp, textAlign = TextAlign.End, maxLines = 2)
+            Text(subtitle, color = VMuted, fontSize = 11.sp, textAlign = TextAlign.End, maxLines = 2)
         }
     }
 }
@@ -400,7 +400,7 @@ fun V341JoinScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item { VHeader("الانضمام", "الانضمام التلقائي إلى القروبات والروابط المحددة", engine, Icons.Default.Groups) }
@@ -428,7 +428,7 @@ fun V341JoinScreen(
                     value = text,
                     onValueChange = { text = it.take(16000) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 115.dp),
-                    placeholder = { Text("ألصق روابط الدعوة هنا...\nرابط واحد في كل سطر", color = VMuted, fontSize = 9.sp) },
+                    placeholder = { Text("ألصق روابط الدعوة هنا...\nرابط واحد في كل سطر", color = VMuted, fontSize = 11.sp) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
                         unfocusedBorderColor = VLine,
@@ -444,12 +444,12 @@ fun V341JoinScreen(
                         enabled = text.isNotBlank(),
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(1.dp, VCyan)
-                    ) { Text("إضافة", color = VText, fontSize = 8.sp) }
+                    ) { Text("إضافة", color = VText, fontSize = 10.sp) }
                     OutlinedButton(onClick = onImportFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VBlue)) {
-                        Text("استيراد ملف", color = VText, fontSize = 8.sp)
+                        Text("استيراد ملف", color = VText, fontSize = 10.sp)
                     }
                     OutlinedButton(onClick = onImportExtraction, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VPurple)) {
-                        Text("من الاستخراج", color = VText, fontSize = 8.sp)
+                        Text("من الاستخراج", color = VText, fontSize = 10.sp)
                     }
                 }
             }
@@ -554,7 +554,7 @@ fun V341ExtractionScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item { VHeader("الاستخراج", "استخراج الروابط من القروبات والمحادثات", engine, Icons.Default.Link) }
@@ -576,7 +576,7 @@ fun V341ExtractionScreen(
                 ) {
                     Icon(Icons.Default.Sync, null, tint = VBlue)
                     Spacer(Modifier.width(4.dp))
-                    Text("مزامنة القروبات", color = VText, fontSize = 9.sp)
+                    Text("مزامنة القروبات", color = VText, fontSize = 11.sp)
                 }
             }
         }
@@ -613,7 +613,7 @@ fun V341ExtractionScreen(
                     onValueChange = { query = it.take(80) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("البحث في القروبات...", color = VMuted, fontSize = 9.sp) },
+                    placeholder = { Text("البحث في القروبات...", color = VMuted, fontSize = 11.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = VCyan) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
@@ -627,7 +627,7 @@ fun V341ExtractionScreen(
                 Text(
                     "تم تحديد ${groups.count { it.selected }} من ${groups.size}",
                     color = VCyan,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End
                 )
@@ -702,7 +702,7 @@ private fun VGroupRow(group: TargetGroup, onSelected: (Long, Boolean) -> Unit) {
                     if (!group.activityText.isNullOrBlank()) add(group.activityText!!)
                 }.joinToString(" • ")
                 if (meta.isNotBlank()) {
-                    Text(meta, color = VMuted, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(meta, color = VMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -734,7 +734,7 @@ fun V341ScanScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item { VHeader("الفحص", "التحقق من الروابط وتصنيفها", engine, Icons.Default.Search) }
@@ -746,7 +746,7 @@ fun V341ScanScreen(
                     value = text,
                     onValueChange = { text = it.take(16000) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 115.dp),
-                    placeholder = { Text("أدخل كل رابط في سطر جديد...", color = VMuted, fontSize = 9.sp) },
+                    placeholder = { Text("أدخل كل رابط في سطر جديد...", color = VMuted, fontSize = 11.sp) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
                         unfocusedBorderColor = VLine,
@@ -762,12 +762,12 @@ fun V341ScanScreen(
                         enabled = text.isNotBlank(),
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(1.dp, VCyan)
-                    ) { Text("إضافة", color = VText, fontSize = 8.sp) }
+                    ) { Text("إضافة", color = VText, fontSize = 10.sp) }
                     OutlinedButton(onClick = onImportFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VBlue)) {
-                        Text("ملف", color = VText, fontSize = 8.sp)
+                        Text("ملف", color = VText, fontSize = 10.sp)
                     }
                     OutlinedButton(onClick = onImportExtraction, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VPurple)) {
-                        Text("الاستخراج", color = VText, fontSize = 8.sp)
+                        Text("الاستخراج", color = VText, fontSize = 10.sp)
                     }
                 }
             }
@@ -871,7 +871,7 @@ fun V341PublishScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         item { VHeader("النشر", "إرسال الرسائل إلى القروبات المحددة", engine, Icons.Default.Send) }

@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.althmany.extractor.ExtractorFeatureRuntime
 import com.althmany.groupmanager.GroupManagerApp
+import com.althmany.groupmanager.model.PreferredTarget
+import com.althmany.groupmanager.util.WhatsAppLauncher
 import com.althmany.extractor.data.ExtractionMode
 import com.althmany.extractor.data.LinkRecord
 import com.althmany.extractor.data.ExtractionLog
@@ -220,6 +222,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (!prepareExplicitOperation("SCAN")) return@launch
+            // 3.4.1: Scan classifies only. Membership actions belong to original Sender/Join.
+            ScanController.setActionMode(ScanActionMode.SCAN_ONLY)
+            ScanController.setRequestToJoinEnabled(false)
             ScanController.start()
         }
     }
@@ -300,7 +305,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ScanController.refreshStats()
 
             if (_scanItems.value.isNotEmpty()) {
-                _message.value = "3/4 • بدء الفحص${if (scanState.value.actionMode == ScanActionMode.SCAN_AND_JOIN) " + الانضمام" else ""} • جديد $imported"
+                _message.value = "3/4 • بدء الفحص والتصنيف • جديد $imported"
+                ScanController.setActionMode(ScanActionMode.SCAN_ONLY)
+                ScanController.setRequestToJoinEnabled(false)
                 ScanController.start()
                 if (!waitScanFinished()) {
                     _message.value = "PIPELINE_STOPPED: الفحص • ${scanState.value.message}"
@@ -330,7 +337,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setMaxRounds(value: Int) = ExtractionController.setMaxScrollIterations(value)
     fun setExtractionRetries(value: Int) = ExtractionController.setMaxSameGroupRetries(value)
     fun setExtractionDelayMs(value: Long) = ExtractionController.setBetweenItemsDelayMs(value)
-    fun setTargetWhatsApp(packageName: String) = ExtractionController.setTargetWhatsAppPackage(packageName)
+    fun setTargetWhatsApp(packageName: String) {
+        ExtractionController.setTargetWhatsAppPackage(packageName)
+        val senderApp = getApplication<Application>() as? GroupManagerApp ?: return
+        val discovered = WhatsAppLauncher.discoverWhatsAppApps(senderApp)
+            .firstOrNull { it.packageName == packageName }
+        senderApp.preferences.clearRemoteSecureTarget()
+        senderApp.preferences.selectedWhatsAppPackage = packageName
+        senderApp.preferences.selectedWhatsAppLabel = discovered?.label ?: packageName
+        senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+    }
     fun refreshRuntimeEnvironment() = ExtractionController.refreshRuntimeEnvironment()
 
     /** Global controls used by every screen. Only the engine that currently owns WhatsApp reacts. */
