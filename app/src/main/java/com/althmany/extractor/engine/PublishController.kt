@@ -785,6 +785,7 @@ object PublishController {
     }
 
     private suspend fun openVerifiedGroupShizuku(group: TargetGroup, packageName: String): Boolean {
+        val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, packageName)
         if (!openTargetWhatsApp(packageName)) {
             if (!ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)) return false
         }
