@@ -84,7 +84,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var globalJob: Job? = null
     private var targetDiscoveryJob: Job? = null
 
-    private suspend fun <T> queryIo(block: () -> T): T =
+    private suspend fun <T> queryIo(block: suspend () -> T): T =
         withContext(Dispatchers.IO) { block() }
 
     init {

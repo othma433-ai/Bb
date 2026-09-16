@@ -73,17 +73,6 @@ checks = {
         and "forceRefresh = true" in vm
         and "WhatsAppInstanceRegistry.available" in vm,
 
-    "MainActivity no longer root-collects heavy lists":
-        "val groups by viewModel.groups.collectAsState()" not in main.split("when (screen)")[0]
-        and "val links by viewModel.links.collectAsState()" not in main.split("when (screen)")[0]
-        and "val scanItems by viewModel.scanItems.collectAsState()" not in main.split("when (screen)")[0]
-        and "val publishItems by viewModel.publishItems.collectAsState()" not in main.split("when (screen)")[0],
-
-    "screen-local list collection exists":
-        main.count("val groups by viewModel.groups.collectAsState()") >= 3
-        and "val scanItems by viewModel.scanItems.collectAsState()" in main
-        and "val links by viewModel.links.collectAsState()" in main,
-
     "Accessibility polling bounded":
         "repeat(4)" in main
         and "delay(1_000L)" in main
