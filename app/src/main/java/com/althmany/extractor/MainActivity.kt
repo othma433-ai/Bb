@@ -328,7 +328,9 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                     onResume = joinCoordinator::resume,
                     onStop = joinCoordinator::stop,
                     onAdvancedTargets = joinCoordinator::openAdvancedTargetManager
-                )                AppScreen.SCAN -> ProfessionalScanScreen(
+                )
+
+                AppScreen.SCAN -> ProfessionalScanScreen(
                     padding = zero,
                     engine = engine,
                     scan = scanState,
@@ -358,7 +360,9 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                         pendingFormat = format
                         createScanDocument.launch("AL-thmany-scan.${format.extension}")
                     }
-                )                AppScreen.PUBLISH -> V341PublishScreen(
+                )
+
+                AppScreen.PUBLISH -> V341PublishScreen(
                     padding = zero,
                     engine = engine,
                     publish = publishState,
