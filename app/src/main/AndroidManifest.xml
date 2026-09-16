@@ -91,8 +91,13 @@
         <!-- Integrated Extractor workspace: extraction + scan + publish -->
         <activity
             android:name="com.althmany.extractor.MainActivity"
-            android:exported="false"
-            android:theme="@style/Theme.ALThmanyExtractor" />
+            android:exported="true"
+            android:theme="@style/Theme.ALThmanyExtractor">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name="com.althmany.extractor.accessibility.WhatsAppAccessibilityService"
@@ -130,11 +135,6 @@
             android:name=".ui.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.AlOthmanySender.Main">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

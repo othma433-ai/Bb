@@ -28,12 +28,7 @@ object ExportManager {
     }
 
     fun exportScan(resolver: ContentResolver, uri: Uri, format: ExportFormat, items: List<ScanRecord>) {
-        when (format) {
-            ExportFormat.CSV -> exportScanCsv(resolver, uri, items)
-            ExportFormat.TXT -> exportScanTxt(resolver, uri, items)
-            ExportFormat.JSON -> exportScanJson(resolver, uri, items)
-            ExportFormat.XLSX -> exportScanXlsx(resolver, uri, items)
-        }
+        StructuredScanExporter.export(resolver, uri, format, items)
     }
 
     fun exportPublish(resolver: ContentResolver, uri: Uri, format: ExportFormat, items: List<PublishItem>) {

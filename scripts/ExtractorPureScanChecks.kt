@@ -34,12 +34,11 @@ fun main() {
     check(meta.memberCountText?.contains("245") == true)
     check(meta.confidence >= 90)
 
-    check(ScanRetryPolicy.shouldRetry(ScanStatus.UNKNOWN, 1, 3))
-    check(ScanRetryPolicy.shouldRetry(ScanStatus.NETWORK_ERROR, 2, 3))
+    check(!ScanRetryPolicy.shouldRetry(ScanStatus.UNKNOWN, 1, 3))
+    check(!ScanRetryPolicy.shouldRetry(ScanStatus.NETWORK_ERROR, 1, 3))
+    check(!ScanRetryPolicy.shouldRetry(ScanStatus.ERROR, 1, 3))
     check(!ScanRetryPolicy.shouldRetry(ScanStatus.DIRECT, 1, 3))
-    check(!ScanRetryPolicy.shouldRetry(ScanStatus.UNKNOWN, 3, 3))
-    check(ScanRetryPolicy.backoffMs(ScanStatus.UNKNOWN, 1, ScanSpeedProfile.HYPER) <
-        ScanRetryPolicy.backoffMs(ScanStatus.UNKNOWN, 1, ScanSpeedProfile.SAFE))
+    check(ScanRetryPolicy.backoffMs(ScanStatus.UNKNOWN, 1, ScanSpeedProfile.HYPER) == 0L)
     check(ScanSpeedProfile.HYPER.settleDelayMs < ScanSpeedProfile.ADAPTIVE.settleDelayMs)
     check(ScanSpeedProfile.ADAPTIVE.settleDelayMs < ScanSpeedProfile.SAFE.settleDelayMs)
     check(ScanSpeedProfile.HYPER.previewTimeoutMs >= 3_000L)

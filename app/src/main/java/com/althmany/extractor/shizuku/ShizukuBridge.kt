@@ -127,7 +127,60 @@ object ShizukuBridge {
     }
 
     suspend fun probe(context:Context,targetPackage:String?):String{val s=status();if(!s.binderAlive)return "binder=OFF";if(!s.permissionGranted)return "binder=ON; permission=DENIED";if(!ensureBound(context))return "binder=ON; permission=GRANTED; userService=FAILED";val id=execute(context,"id",2500);val safe=targetPackage?.takeIf{Regex("[A-Za-z0-9_.]+").matches(it)};val snap=if(safe!=null)fastSnapshot(context,safe,180) else FastUiResult("SKIPPED","no target","");return "binder=ON; permission=GRANTED; serverUid=${s.serverUid?:-1}; shell=${if(id.success)"OK" else "FAIL"}; persistentUI=${snap.state}:${snap.detail.take(80)}"}
-    suspend fun launchPackage(context:Context,targetPackage:String):Boolean{if(!Regex("[A-Za-z0-9_.]+").matches(targetPackage))return false;val cmd="monkey -p '$targetPackage' -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1";return execute(context,cmd,4000).success}
+    suspend fun launchPackage(
+        context: Context,
+        targetPackage: String,
+        androidUserId: Int? = null
+    ): Boolean {
+        if (!Regex("[A-Za-z0-9_.]+").matches(targetPackage)) return false
+        val userId = androidUserId?.takeIf { it >= 0 }
+        if (userId == null) {
+            val cmd = "monkey -p '$targetPackage' -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1"
+            return execute(context, cmd, 4_000).success
+        }
+
+        val resolved = execute(
+            context,
+            "cmd package resolve-activity --brief --user $userId -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p '$targetPackage' 2>/dev/null | tail -n 1",
+            3_000
+        )
+        val component = resolved.output.lineSequence()
+            .map(String::trim)
+            .lastOrNull { it.contains('/') && it.startsWith(targetPackage) }
+
+        if (!component.isNullOrBlank()) {
+            val started = execute(
+                context,
+                "am start --user $userId -n '$component' >/dev/null 2>&1",
+                4_000
+            )
+            if (started.success) return true
+        }
+
+        return execute(
+            context,
+            "am start --user $userId -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p '$targetPackage' >/dev/null 2>&1",
+            4_000
+        ).success
+    }
+
+    suspend fun launchUrl(
+        context: Context,
+        targetPackage: String,
+        url: String,
+        androidUserId: Int? = null
+    ): Boolean {
+        if (!Regex("[A-Za-z0-9_.]+").matches(targetPackage)) return false
+        if (!url.startsWith("https://chat.whatsapp.com/")) return false
+        val safeUrl = url.replace("'", "%27")
+        val userId = androidUserId?.takeIf { it >= 0 }
+        val user = if (userId == null) "" else "--user $userId "
+        return execute(
+            context,
+            "am start ${user}-a android.intent.action.VIEW -d '$safeUrl' -p '$targetPackage' >/dev/null 2>&1",
+            5_000
+        ).success
+    }
     suspend fun reset(context:Context):Boolean=withContext(Dispatchers.IO){ensureBound(context)&&runCatching{remote?.fastResetUiAutomation()==true}.getOrDefault(false)}
 
     private fun userServiceArgs(context:Context)=Shizuku.UserServiceArgs(ComponentName(context,ShizukuShellUserService::class.java)).daemon(false).processNameSuffix("extractor_shell").debuggable(BuildConfig.DEBUG).version(BuildConfig.VERSION_CODE)

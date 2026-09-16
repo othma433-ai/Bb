@@ -5,6 +5,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.althmany.extractor.ExtractorFeatureRuntime
 import com.althmany.groupmanager.GroupManagerApp
+import com.althmany.groupmanager.model.PreferredTarget
+import com.althmany.groupmanager.model.AutomationBackend
+import com.althmany.groupmanager.domain.RuntimeSpeedMode
+import com.althmany.groupmanager.util.WhatsAppLauncher
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRemoteTarget
+import com.althmany.extractor.profile.UnifiedRuntimeSnapshot
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
+import com.althmany.extractor.profile.WhatsAppInstanceRegistry
 import com.althmany.extractor.data.ExtractionMode
 import com.althmany.extractor.data.LinkRecord
 import com.althmany.extractor.data.ExtractionLog
@@ -27,18 +36,33 @@ import com.althmany.extractor.engine.ScanActionMode
 import com.althmany.extractor.engine.ScanSpeedProfile
 import com.althmany.extractor.engine.RuntimeOperationCoordinator
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val repo = ExtractorFeatureRuntime.repository
+    private val repo get() = ExtractorFeatureRuntime.repository
 
     val engineState: StateFlow<ExtractionUiState> = ExtractionController.state
     val scanState: StateFlow<ScanUiState> = ScanController.state
     val publishState: StateFlow<PublishUiState> = PublishController.state
+
+    private val _runtimeTarget = MutableStateFlow(
+        UnifiedRuntimeTargetStore.resolve(
+            application,
+            ExtractionController.state.value.selectedWhatsAppPackage
+        )
+    )
+    val runtimeTarget: StateFlow<UnifiedRuntimeSnapshot> = _runtimeTarget.asStateFlow()
+
+    private val _remoteRuntimeTargets = MutableStateFlow<List<UnifiedRemoteTarget>>(emptyList())
+    val remoteRuntimeTargets: StateFlow<List<UnifiedRemoteTarget>> = _remoteRuntimeTargets.asStateFlow()
 
     private val _groups = MutableStateFlow<List<TargetGroup>>(emptyList())
     val groups: StateFlow<List<TargetGroup>> = _groups.asStateFlow()
@@ -59,33 +83,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val message: StateFlow<String?> = _message.asStateFlow()
 
     private var globalJob: Job? = null
+    private var targetDiscoveryJob: Job? = null
+
+    private suspend fun <T> queryIo(block: suspend () -> T): T =
+        withContext(Dispatchers.IO) { block() }
 
     init {
+        viewModelScope.launch {
+            engineState
+                .map { it.selectedWhatsAppPackage }
+                .distinctUntilChanged()
+                .collect { packageName ->
+                    _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+                        getApplication<Application>(),
+                        packageName
+                    )
+                }
+        }
+        viewModelScope.launch {
+            engineState
+                .map { it.shizukuReady }
+                .distinctUntilChanged()
+                .collect { ready ->
+                    if (ready && _remoteRuntimeTargets.value.isEmpty()) {
+                        refreshRemoteTargetsInternal(silent = true)
+                    }
+                }
+        }
         refresh()
         viewModelScope.launch {
             var lastIndex = -1
-            var lastStatus = ""
-            var lastStatsHash = 0
+            var lastTerminal = false
             ScanController.state.collect { state ->
-                val key = state.status.name
-                val statsHash = state.stats.hashCode()
-                if (state.currentIndex != lastIndex || key != lastStatus || statsHash != lastStatsHash) {
+                val terminal = state.status.name in setOf("COMPLETED", "ERROR", "STOPPED")
+                if (state.currentIndex != lastIndex || terminal != lastTerminal) {
                     lastIndex = state.currentIndex
-                    lastStatus = key
-                    lastStatsHash = statsHash
-                    _scanItems.value = repo.scanItems()
+                    lastTerminal = terminal
+                    _scanItems.value = queryIo { repo.scanItems() }
                 }
             }
         }
         viewModelScope.launch {
             var lastIndex = -1
-            var lastStatus = ""
+            var lastRunId: Long? = null
+            var lastTerminal = false
             PublishController.state.collect { state ->
-                if (state.currentIndex != lastIndex || state.status.name != lastStatus) {
+                val terminal = state.status.name in setOf("COMPLETED", "ERROR", "STOPPED")
+                val runId = state.activeRunId
+                if (state.currentIndex != lastIndex || runId != lastRunId || terminal != lastTerminal) {
                     lastIndex = state.currentIndex
-                    lastStatus = state.status.name
-                    val runId = state.activeRunId
-                    _publishItems.value = if (runId == null) emptyList() else repo.publishItems(runId)
+                    lastRunId = runId
+                    lastTerminal = terminal
+                    _publishItems.value = if (runId == null) emptyList()
+                    else queryIo { repo.publishItems(runId) }
                 }
             }
         }
@@ -93,12 +143,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() {
         viewModelScope.launch {
-            _groups.value = repo.groups()
-            _links.value = repo.links()
-            _logs.value = repo.logs()
-            _scanItems.value = repo.scanItems()
             val publishRunId = PublishController.state.value.activeRunId
-            _publishItems.value = if (publishRunId == null) emptyList() else repo.publishItems(publishRunId)
+            val groups = queryIo { repo.groups() }
+            val links = queryIo { repo.links() }
+            val logs = queryIo { repo.logs() }
+            val scanItems = queryIo { repo.scanItems() }
+            val publishItems = if (publishRunId == null) emptyList()
+            else queryIo { repo.publishItems(publishRunId) }
+
+            _groups.value = groups
+            _links.value = links
+            _logs.value = logs
+            _scanItems.value = scanItems
+            _publishItems.value = publishItems
+
             ExtractionController.refreshStats()
             ScanController.refreshStats()
             PublishController.refreshStats()
@@ -198,10 +256,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    private fun applyUnifiedPerformanceProfile() {
+        // Fastest supported pacing for every engine; reliability retry policies stay engine-owned.
+        ExtractionController.setSpeed(SpeedProfile.HYPER)
+        ExtractionController.setBetweenItemsDelayMs(0L)
+
+        ScanController.setSpeed(ScanSpeedProfile.HYPER)
+        ScanController.setMaxAttempts(1)
+
+        PublishController.setSpeed(PublishSpeedProfile.INSTANT)
+
+        (getApplication<Application>() as? GroupManagerApp)?.preferences?.apply {
+            runtimeSpeedMode = RuntimeSpeedMode.MAX
+            fastHandsFreeMode = true
+            interLinkDelayMs = 0
+            autoAdvance = true
+        }
+    }
+
     fun startExtractionSmart() {
         if (globalJob?.isActive == true) return
         viewModelScope.launch {
             if (!prepareExplicitOperation("EXTRACTION")) return@launch
+            applyUnifiedPerformanceProfile()
             if (ensureGroupsReady()) ExtractionController.start()
         }
     }
@@ -210,16 +287,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (globalJob?.isActive == true) return
         viewModelScope.launch {
             if (input.isNotBlank()) {
-                val added = repo.addScanLinksFromText(input)
+                val added = queryIo { repo.addScanLinksFromText(input) }
                 _message.value = "تمت إضافة $added رابط جديد — بدء الفحص"
             }
-            _scanItems.value = repo.scanItems()
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
             if (_scanItems.value.isEmpty()) {
                 _message.value = "NO_SCAN_ITEMS: الصق روابط أو استوردها من الاستخراج"
                 return@launch
             }
             if (!prepareExplicitOperation("SCAN")) return@launch
+            applyUnifiedPerformanceProfile()
+            // 3.4.1: Scan classifies only. Membership actions belong to original Sender/Join.
+            ScanController.setActionMode(ScanActionMode.SCAN_ONLY)
+            ScanController.setRequestToJoinEnabled(false)
             ScanController.start()
         }
     }
@@ -232,6 +313,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (!prepareExplicitOperation("PUBLISH")) return@launch
+            applyUnifiedPerformanceProfile()
             PublishController.start(message)
         }
     }
@@ -286,6 +368,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         globalJob = viewModelScope.launch {
+            applyUnifiedPerformanceProfile()
             if (!ensureGroupsReady()) return@launch
 
             _message.value = "1/4 • القروبات جاهزة — بدء الاستخراج"
@@ -295,12 +378,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            val imported = repo.importInviteLinksFromExtraction()
-            _scanItems.value = repo.scanItems()
+            val imported = queryIo { repo.importInviteLinksFromExtraction() }
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
 
             if (_scanItems.value.isNotEmpty()) {
-                _message.value = "3/4 • بدء الفحص${if (scanState.value.actionMode == ScanActionMode.SCAN_AND_JOIN) " + الانضمام" else ""} • جديد $imported"
+                _message.value = "3/4 • بدء الفحص والتصنيف • جديد $imported"
+                ScanController.setActionMode(ScanActionMode.SCAN_ONLY)
+                ScanController.setRequestToJoinEnabled(false)
                 ScanController.start()
                 if (!waitScanFinished()) {
                     _message.value = "PIPELINE_STOPPED: الفحص • ${scanState.value.message}"
@@ -330,8 +415,170 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setMaxRounds(value: Int) = ExtractionController.setMaxScrollIterations(value)
     fun setExtractionRetries(value: Int) = ExtractionController.setMaxSameGroupRetries(value)
     fun setExtractionDelayMs(value: Long) = ExtractionController.setBetweenItemsDelayMs(value)
-    fun setTargetWhatsApp(packageName: String) = ExtractionController.setTargetWhatsAppPackage(packageName)
-    fun refreshRuntimeEnvironment() = ExtractionController.refreshRuntimeEnvironment()
+    fun setTargetWhatsApp(packageName: String) {
+        val activeSender = (getApplication<Application>() as? GroupManagerApp)
+            ?.preferences?.accessibilityBatchRunning == true
+        if (activeSender) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير نسخة واتساب"
+            return
+        }
+        ExtractionController.setTargetWhatsAppPackage(packageName)
+        UnifiedRuntimeTargetStore.setLocalTarget(getApplication<Application>(), packageName)
+        if (!ExtractorFeatureRuntime.switchRuntimeEnvironment(getApplication<Application>())) {
+            _message.value = "تعذر تبديل بيئة البيانات أثناء وجود عملية نشطة"
+            return
+        }
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp != null) {
+            val selectedLabel = engineState.value.availableWhatsApp
+                .firstOrNull { it.packageName == packageName }
+                ?.labelAr
+                ?: WhatsAppInstanceRegistry.labelFor(packageName)
+            senderApp.preferences.clearRemoteSecureTarget()
+            senderApp.preferences.selectedWhatsAppPackage = packageName
+            senderApp.preferences.selectedWhatsAppLabel = selectedLabel
+            senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+        }
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(getApplication<Application>(), packageName)
+        refresh()
+    }
+
+    private suspend fun refreshRemoteTargetsInternal(silent: Boolean) {
+        if (!engineState.value.shizukuReady) {
+            if (!silent) _message.value = "Shizuku غير جاهز لاكتشاف Dual / Work / Secure"
+            return
+        }
+        if (!silent) {
+            _message.value = "جارٍ اكتشاف جميع بيئات واتساب عبر Shizuku…"
+        }
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                UnifiedRuntimeTargetStore.discoverRemoteTargets(getApplication<Application>())
+            }
+        }
+        val targets = result.getOrElse {
+            if (!silent) _message.value = "فشل اكتشاف البيئات: ${it.message.orEmpty()}"
+            emptyList()
+        }
+        _remoteRuntimeTargets.value = targets
+        if (!silent) {
+            _message.value = if (targets.isEmpty()) {
+                "لم يجد Shizuku نسخة واتساب إضافية قابلة للتحقق"
+            } else {
+                "تم اكتشاف ${targets.size} نسخة واتساب إضافية"
+            }
+        }
+    }
+
+    fun discoverRemoteRuntimeTargets() {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تحديث نسخ واتساب"
+            return
+        }
+        if (targetDiscoveryJob?.isActive == true) return
+        targetDiscoveryJob = viewModelScope.launch {
+            refreshRemoteTargetsInternal(silent = false)
+        }
+    }
+
+    fun refreshTargetCatalog() {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تحديث نسخ واتساب"
+            return
+        }
+        if (targetDiscoveryJob?.isActive == true) return
+        targetDiscoveryJob = viewModelScope.launch {
+            _message.value = "جارٍ تحديث جميع نسخ واتساب…"
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    WhatsAppInstanceRegistry.available(getApplication<Application>(), forceRefresh = true)
+                }
+            }
+            ExtractionController.refreshRuntimeEnvironment()
+            _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+                getApplication<Application>(),
+                engineState.value.selectedWhatsAppPackage
+            )
+            if (engineState.value.shizukuReady) {
+                refreshRemoteTargetsInternal(silent = true)
+            }
+            _message.value = "اكتمل تحديث نسخ واتساب"
+        }
+    }
+
+    fun setRemoteRuntimeTarget(target: UnifiedRemoteTarget) {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تغيير بيئة التشغيل"
+            return
+        }
+        val senderAppBeforeSwitch = getApplication<Application>() as? GroupManagerApp
+        if (senderAppBeforeSwitch?.preferences?.accessibilityBatchRunning == true) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير بيئة التشغيل"
+            return
+        }
+        UnifiedRuntimeTargetStore.setRemoteTarget(getApplication<Application>(), target)
+        if (!ExtractorFeatureRuntime.switchRuntimeEnvironment(getApplication<Application>())) {
+            _message.value = "تعذر تبديل بيئة البيانات أثناء وجود عملية نشطة"
+            return
+        }
+        ExtractionController.refreshRuntimeEnvironment()
+
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp != null) {
+            senderApp.preferences.setRemoteSecureTarget(
+                target.androidUserId,
+                target.packageName,
+                target.environmentLabel
+            )
+            senderApp.preferences.automationBackend = AutomationBackend.SHIZUKU
+            senderApp.preferences.runtimeAutomationBackend = AutomationBackend.SHIZUKU
+            senderApp.preferences.selectedWhatsAppPackage = target.packageName
+            senderApp.preferences.selectedWhatsAppLabel = target.whatsappLabel
+            senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+        }
+
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(getApplication<Application>())
+        refresh()
+        _message.value = "تم اختيار ${target.environmentLabel} • ${target.whatsappLabel} عبر Shizuku"
+    }
+
+    fun setRuntimeBackendPreference(value: RuntimeBackendPreference) {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تغيير محرك التشغيل"
+            return
+        }
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp?.preferences?.accessibilityBatchRunning == true) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير محرك التشغيل"
+            return
+        }
+        if (_runtimeTarget.value.remoteTarget && value == RuntimeBackendPreference.ACCESSIBILITY) {
+            _message.value = "الهدف في Android user آخر يحتاج Shizuku؛ Accessibility تعمل داخل الملف المحلي فقط"
+            return
+        }
+        UnifiedRuntimeTargetStore.setPreference(getApplication<Application>(), value)
+        (getApplication<Application>() as? GroupManagerApp)?.preferences?.let { prefs ->
+            prefs.automationBackend = when (value) {
+                RuntimeBackendPreference.AUTO -> AutomationBackend.AUTO
+                RuntimeBackendPreference.ACCESSIBILITY -> AutomationBackend.ACCESSIBILITY
+                RuntimeBackendPreference.SHIZUKU -> AutomationBackend.SHIZUKU
+            }
+        }
+        ExtractionController.refreshRuntimeEnvironment()
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+            getApplication<Application>(),
+            engineState.value.selectedWhatsAppPackage
+        )
+        _message.value = "تم اختيار محرك التشغيل: ${value.labelAr}"
+    }
+
+    fun refreshRuntimeEnvironment() {
+        ExtractionController.refreshRuntimeEnvironment()
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+            getApplication<Application>(),
+            engineState.value.selectedWhatsAppPackage
+        )
+    }
 
     /** Global controls used by every screen. Only the engine that currently owns WhatsApp reacts. */
     fun pauseActiveOperation() {
@@ -368,24 +615,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSelected(id: Long, selected: Boolean) {
         viewModelScope.launch {
-            repo.setSelected(id, selected)
-            _groups.value = repo.groups()
+            queryIo { repo.setSelected(id, selected) }
+            _groups.value = queryIo { repo.groups() }
             ExtractionController.refreshStats()
         }
     }
 
     fun setAllSelected(selected: Boolean) {
         viewModelScope.launch {
-            repo.setAllSelected(selected)
-            _groups.value = repo.groups()
+            queryIo { repo.setAllSelected(selected) }
+            _groups.value = queryIo { repo.groups() }
             ExtractionController.refreshStats()
         }
     }
 
     fun applyGroupSelectionPreset(preset: GroupSelectionPreset) {
         viewModelScope.launch {
-            repo.setSelectionPreset(preset, engineState.value.selectedWhatsAppPackage)
-            _groups.value = repo.groups()
+            queryIo { repo.setSelectionPreset(preset, engineState.value.selectedWhatsAppPackage) }
+            _groups.value = queryIo { repo.groups() }
             ExtractionController.refreshStats()
             _message.value = preset.labelAr
         }
@@ -393,8 +640,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addScanLinks(text: String) {
         viewModelScope.launch {
-            val added = repo.addScanLinksFromText(text)
-            _scanItems.value = repo.scanItems()
+            val added = queryIo { repo.addScanLinksFromText(text) }
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
             _message.value = "تمت إضافة $added رابط دعوة جديد للفحص"
         }
@@ -418,8 +665,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _message.value = "لم يتم العثور على روابط دعوات واتساب داخل الملف"
                 return@launch
             }
-            val added = repo.addScanLinksFromText(links.joinToString("\n"))
-            _scanItems.value = repo.scanItems()
+            val added = queryIo { repo.addScanLinksFromText(links.joinToString("\n")) }
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
             _message.value = "تم استيراد $added رابط جديد من الملف • الإجمالي ${_scanItems.value.size}"
         }
@@ -427,8 +674,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importScanLinksFromExtraction() {
         viewModelScope.launch {
-            val added = repo.importInviteLinksFromExtraction()
-            _scanItems.value = repo.scanItems()
+            val added = queryIo { repo.importInviteLinksFromExtraction() }
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
             _message.value = "تم استيراد $added رابط دعوة جديد من نتائج الاستخراج"
         }
@@ -436,7 +683,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reloadScanItems() {
         viewModelScope.launch {
-            _scanItems.value = repo.scanItems()
+            _scanItems.value = queryIo { repo.scanItems() }
             ScanController.refreshStats()
         }
     }
@@ -450,7 +697,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearScan() {
         ScanController.stop()
         viewModelScope.launch {
-            repo.clearScan()
+            queryIo { repo.clearScan() }
             _scanItems.value = emptyList()
             ScanController.refreshStats()
             _message.value = "تم مسح نتائج الفحص"
@@ -466,7 +713,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun reloadPublishItems() {
         viewModelScope.launch {
             val runId = PublishController.state.value.activeRunId
-            _publishItems.value = if (runId == null) emptyList() else repo.publishItems(runId)
+            _publishItems.value = if (runId == null) emptyList() else queryIo { repo.publishItems(runId) }
             PublishController.refreshStats(runId)
         }
     }
@@ -480,13 +727,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ExtractionController.stop()
             ScanController.stop()
             PublishController.stop()
-            repo.clearAll()
+            queryIo { repo.clearAll() }
             refresh()
             _message.value = "تم مسح البيانات"
         }
     }
 
-    fun reloadLinks() { viewModelScope.launch { _links.value = repo.links() } }
-    fun reloadLogs() { viewModelScope.launch { _logs.value = repo.logs() } }
+    fun reloadLinks() { viewModelScope.launch { _links.value = queryIo { repo.links() } } }
+    fun reloadLogs() { viewModelScope.launch { _logs.value = queryIo { repo.logs() } } }
     fun consumeMessage() { _message.value = null }
 }

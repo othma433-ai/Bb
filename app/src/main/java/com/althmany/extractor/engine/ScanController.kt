@@ -13,6 +13,8 @@ import com.althmany.extractor.data.InviteKind
 import com.althmany.extractor.data.ScanRecord
 import com.althmany.extractor.data.ScanStatus
 import com.althmany.extractor.profile.WhatsAppInstanceRegistry
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
 import com.althmany.extractor.shizuku.ShizukuBridge
 import com.althmany.extractor.shizuku.ShizukuUiRuntime
 import com.althmany.extractor.shizuku.ShizukuUiTree
@@ -103,62 +105,100 @@ object ScanController {
             _state.value = _state.value.copy(message = "RUNTIME_NO_TARGET: اختر نسخة واتساب أولاً")
             return false
         }
-        var opened = ExtractionController.openWhatsApp()
-        if (!opened && ShizukuBridge.status().ready) {
-            opened = ShizukuBridge.launchPackage(appContext, packageName)
+        val preference = UnifiedRuntimeTargetStore.preference(appContext)
+        val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, packageName)
+        val sh = runCatching { ShizukuBridge.status() }.getOrNull()
+
+        val opened = when (preference) {
+            RuntimeBackendPreference.SHIZUKU -> {
+                if (sh?.ready != true) {
+                    _state.value = _state.value.copy(
+                        message = "SHIZUKU_NOT_READY: المحرك محدد على Shizuku لكنه غير جاهز"
+                    )
+                    return false
+                }
+                ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)
+            }
+            RuntimeBackendPreference.ACCESSIBILITY -> ExtractionController.openWhatsApp()
+            RuntimeBackendPreference.AUTO ->
+                ExtractionController.openWhatsApp() ||
+                    (sh?.ready == true && ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId))
         }
+
         if (!opened) {
-            _state.value = _state.value.copy(message = "RUNTIME_OPEN_FAILED: تعذر فتح نسخة واتساب المحددة")
+            _state.value = _state.value.copy(
+                message = "RUNTIME_OPEN_FAILED: تعذر فتح نسخة واتساب المحددة"
+            )
             return false
         }
 
-        val accessDeadline = SystemClock.elapsedRealtime() + minOf(timeoutMs, 1_800L)
-        while (SystemClock.elapsedRealtime() < accessDeadline) {
-            val live = recoverLiveService()
-            if (live != null && adapter.isWhatsAppRoot(live.currentRoot(), packageName)) {
-                shizukuMode = false
-                _state.value = _state.value.copy(message = "READY_ACCESSIBILITY: واتساب ظاهر لخدمة Accessibility")
-                return true
+        // Do not spend the Accessibility grace window when AUTO already resolved to Shizuku.
+        if (runtimeTarget.effectiveBackend == com.althmany.extractor.profile.RuntimeBackendKind.ACCESSIBILITY &&
+            !runtimeTarget.remoteTarget
+        ) {
+            val accessDeadline = SystemClock.elapsedRealtime() + minOf(timeoutMs, 1_800L)
+            while (SystemClock.elapsedRealtime() < accessDeadline) {
+                val live = recoverLiveService()
+                if (live != null && adapter.isWhatsAppRoot(live.currentRoot(), packageName)) {
+                    shizukuMode = false
+                    _state.value = _state.value.copy(
+                        message = "READY_ACCESSIBILITY: الفحص يرى واتساب عبر Accessibility"
+                    )
+                    return true
+                }
+                withTimeoutOrNull(150L) { uiEvents.first() }
+                delay(20L)
             }
-            withTimeoutOrNull(150L) { uiEvents.first() }
-            delay(20L)
+            if (preference == RuntimeBackendPreference.ACCESSIBILITY) {
+                shizukuMode = false
+                _state.value = _state.value.copy(
+                    message = "ACCESSIBILITY_ROOT_NOT_READY: Accessibility محددة لكن لا ترى واتساب المستهدف"
+                )
+                return false
+            }
         }
 
-        val sh = ShizukuBridge.status()
-        if (sh.ready) {
+        if (sh?.ready == true) {
             if (!ShizukuBridge.ensureBound(appContext, 4_500L)) {
-                _state.value = _state.value.copy(message = "SHIZUKU_BIND_FAILED: الإذن موجود لكن UserService لم يرتبط")
-            } else {
-                ShizukuBridge.launchPackage(appContext, packageName)
-                var lastDetail = "NO_SNAPSHOT"
-                var resetTried = false
-                val deadline = SystemClock.elapsedRealtime() + (timeoutMs - 1_800L).coerceAtLeast(5_000L)
-                while (SystemClock.elapsedRealtime() < deadline) {
-                    val tree = shizukuUi.snapshot(packageName)
-                    lastDetail = "${tree.state}:${tree.detail.take(140)}"
-                    if (tree.state == "OK" && tree.nodes.isNotEmpty() && shizukuUi.isWhatsApp(tree, packageName)) {
-                        shizukuMode = true
-                        _state.value = _state.value.copy(message = "READY_SHIZUKU: UIAutomation يرى واتساب (${tree.nodes.size} node)")
-                        return true
-                    }
-                    if (!resetTried && tree.state in setOf("UNAVAILABLE", "ERROR", "NO_ROOT")) {
-                        resetTried = true
-                        ShizukuBridge.reset(appContext)
-                        ShizukuBridge.launchPackage(appContext, packageName)
-                    }
-                    delay(110L)
-                }
-                _state.value = _state.value.copy(message = "SHIZUKU_UI_NOT_READY: $lastDetail")
+                _state.value = _state.value.copy(
+                    message = "SHIZUKU_BIND_FAILED: الإذن موجود لكن UserService لم يرتبط"
+                )
+                shizukuMode = false
+                return false
             }
+
+            ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)
+            var lastDetail = "NO_SNAPSHOT"
+            var resetTried = false
+            val deadline = SystemClock.elapsedRealtime() + (timeoutMs - 1_800L).coerceAtLeast(5_000L)
+            while (SystemClock.elapsedRealtime() < deadline) {
+                val tree = shizukuUi.snapshot(packageName)
+                lastDetail = "${tree.state}:${tree.detail.take(140)}"
+                if (tree.state == "OK" && tree.nodes.isNotEmpty() && shizukuUi.isWhatsApp(tree, packageName)) {
+                    shizukuMode = true
+                    _state.value = _state.value.copy(
+                        message = "READY_SHIZUKU: الفحص يرى واتساب عبر Shizuku (${tree.nodes.size} node)"
+                    )
+                    return true
+                }
+                if (!resetTried && tree.state in setOf("UNAVAILABLE", "ERROR", "NO_ROOT")) {
+                    resetTried = true
+                    ShizukuBridge.reset(appContext)
+                    ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)
+                }
+                delay(110L)
+            }
+            _state.value = _state.value.copy(message = "SHIZUKU_UI_NOT_READY: $lastDetail")
         } else {
             _state.value = _state.value.copy(
                 message = when {
-                    !sh.binderAlive -> "SHIZUKU_BINDER_OFF: شغّل Shizuku"
+                    sh == null || !sh.binderAlive -> "SHIZUKU_BINDER_OFF: شغّل Shizuku"
                     !sh.permissionGranted -> "SHIZUKU_PERMISSION_DENIED: امنح التطبيق إذن Shizuku"
                     else -> "RUNTIME_NO_BACKEND: لا يوجد محرك تحكم جاهز"
                 }
             )
         }
+
         shizukuMode = false
         return false
     }
@@ -198,6 +238,12 @@ object ScanController {
 
     fun start() {
         if (job?.isActive == true) return
+        // Scan is permanently read-only and single-pass in the unified 3.4.1 workspace.
+        // Old persisted UI preferences cannot make a new scan slower or repeat the same URL.
+        setActionMode(ScanActionMode.SCAN_ONLY)
+        setRequestToJoinEnabled(false)
+        setSpeed(ScanSpeedProfile.HYPER)
+        setMaxAttempts(1)
         if (SenderRuntimeGuard.isSenderRunning(appContext)) {
             _state.value = _state.value.copy(status = ScanEngineStatus.ERROR, message = "أوقف تشغيل Sender الحالي أولاً قبل تشغيل الفحص")
             return
@@ -254,7 +300,10 @@ object ScanController {
 
     fun refreshStats() {
         if (!::repository.isInitialized) return
-        scope.launch { _state.value = _state.value.copy(stats = repository.scanStats()) }
+        scope.launch {
+            val stats = kotlinx.coroutines.withContext(Dispatchers.IO) { repository.scanStats() }
+            _state.value = _state.value.copy(stats = stats)
+        }
     }
 
     private suspend fun runScan() {
@@ -637,7 +686,7 @@ object ScanController {
         while (SystemClock.elapsedRealtime() < deadline) {
             val tree = shizukuUi.snapshot(packageName)
             if (tree.state == "OK" && tree.nodes.isNotEmpty() && shizukuUi.isWhatsApp(tree, packageName)) return tree
-            delay(75L)
+            delay(45L)
         }
         return null
     }
@@ -747,28 +796,44 @@ object ScanController {
         return if (b.confidence >= a.confidence) b else a
     }
 
-    private fun openInvite(url: String, packageName: String): Boolean = runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            setPackage(packageName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+    private suspend fun openInvite(url: String, packageName: String): Boolean {
+        val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, packageName)
+        if (runtimeTarget.remoteTarget) {
+            if (runtimeTarget.effectiveBackend != com.althmany.extractor.profile.RuntimeBackendKind.SHIZUKU) {
+                return false
+            }
+            return ShizukuBridge.launchUrl(
+                appContext,
+                packageName,
+                url,
+                runtimeTarget.targetAndroidUserId
+            )
         }
-        appContext.startActivity(intent)
-        true
-    }.getOrDefault(false)
+
+        return runCatching {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                setPackage(packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            appContext.startActivity(intent)
+            true
+        }.getOrDefault(false)
+    }
 
     private suspend fun safelyReturnFromInvite(speed: ScanSpeedProfile) {
         val packageName = ExtractionController.state.value.selectedWhatsAppPackage ?: return
+        val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, packageName)
         if (shizukuMode) {
-            val tree = awaitShizukuTree(packageName, 350L)
+            val tree = awaitShizukuTree(packageName, 180L)
             if (tree != null && shizukuUi.clickInviteClose(tree, packageName)) {
                 delay(maxOf(speed.settleDelayMs, 18L))
                 return
             }
             ShizukuBridge.fastBack(appContext)
             delay(maxOf(speed.settleDelayMs, 18L))
-            val after = awaitShizukuTree(packageName, 350L)
+            val after = awaitShizukuTree(packageName, 180L)
             if (after == null || !shizukuUi.isWhatsApp(after, packageName)) {
-                ShizukuBridge.launchPackage(appContext, packageName)
+                ShizukuBridge.launchPackage(appContext, packageName, runtimeTarget.targetAndroidUserId)
             }
             return
         }

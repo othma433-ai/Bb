@@ -894,6 +894,22 @@ class QuickJoinAccessibilityService : AccessibilityService() {
             RuntimeDirective.HANDLE_ACTION -> {
                 val action = screen.action ?: return
                 val actionNode = screen.actionNode ?: return
+                val pendingAction = readPendingAction(current)
+                if (pendingAction != null &&
+                    screen.evidenceConflict == ScreenEvidenceConflict.MULTIPLE_POSITIVE_ACTIONS
+                ) {
+                    app.preferences.transitionAutomation(
+                        AutomationStage.VERIFYING_RESULT,
+                        "Post-action conflict is stable; suppressing duplicate membership click and verifying result",
+                        resetRetries = false
+                    )
+                    runtimeDiagnostic(
+                        current,
+                        "POST_ACTION_DUPLICATE_SUPPRESSED",
+                        "pending=${pendingAction.name}; visible=${action.name}; conflict=${screen.evidenceConflict.name}"
+                    )
+                    return
+                }
                 resetOutcomeEvidence()
                 resetConflictEvidence()
                 homeSurfaceStableScans = 0
@@ -1265,6 +1281,19 @@ class QuickJoinAccessibilityService : AccessibilityService() {
                         resetRetries = false
                     )
                     lastClickAt = 0L
+                    requestScan()
+                }
+                inspection?.evidenceConflict == ScreenEvidenceConflict.MULTIPLE_POSITIVE_ACTIONS -> {
+                    app.preferences.transitionAutomation(
+                        AutomationStage.VERIFYING_RESULT,
+                        "Post-action WhatsApp controls are transitioning; holding instead of re-clicking",
+                        resetRetries = false
+                    )
+                    runtimeDiagnostic(
+                        current,
+                        "POST_ACTION_CONFLICT_HOLD",
+                        "action=${action.name}; conflict=${inspection.evidenceConflict.name}; waiting for stable success/pending evidence"
+                    )
                     requestScan()
                 }
                 inspection?.action == action -> {
@@ -4221,7 +4250,7 @@ class QuickJoinAccessibilityService : AccessibilityService() {
         private const val MIN_ACTION_WIDTH_DP = 48
         private const val MIN_ACTION_HEIGHT_DP = 32
         private const val MAX_PARENT_DEPTH = 5
-        private const val MAX_CLICK_RETRIES = 4
+        private const val MAX_CLICK_RETRIES = 2
         private const val MAX_EXIT_STEPS = 4
         private const val FAST_MAX_EXIT_STEPS = 3
         private const val MAX_INVITE_SCROLL_ATTEMPTS = 2
@@ -4238,11 +4267,11 @@ class QuickJoinAccessibilityService : AccessibilityService() {
         private const val DIRECT_CONVERSATION_NORMAL_MIN_AGE_MS = 650L
         private const val DIRECT_CONVERSATION_WINDOW_EVENT_MAX_AGE_MS = 1_200L
         private const val ACCESSIBILITY_VISUAL_FAST_PROBE_AFTER_MS = 180L
-        private const val ACCESSIBILITY_VISUAL_NORMAL_PROBE_AFTER_MS = 650L
-        private const val ACCESSIBILITY_VISUAL_PROBE_INTERVAL_MS = 420L
+        private const val ACCESSIBILITY_VISUAL_NORMAL_PROBE_AFTER_MS = 400L
+        private const val ACCESSIBILITY_VISUAL_PROBE_INTERVAL_MS = 180L
         private const val ACCESSIBILITY_VISUAL_MAX_PROBE_ATTEMPTS = 3
-        private const val ACCESSIBILITY_VISUAL_FAST_VERIFY_MS = 420L
-        private const val ACCESSIBILITY_VISUAL_NORMAL_VERIFY_MS = 650L
+        private const val ACCESSIBILITY_VISUAL_FAST_VERIFY_MS = 300L
+        private const val ACCESSIBILITY_VISUAL_NORMAL_VERIFY_MS = 450L
         private const val ACCESSIBILITY_VISUAL_MAX_TAP_ATTEMPTS = 2
         private const val ACCESSIBILITY_VISUAL_MAX_SCREENSHOT_FAILURES = 3
 

@@ -5,7 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-class ExtractorDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class ExtractorDatabase(context: Context, databaseName: String = DB_NAME) : SQLiteOpenHelper(context, databaseName, null, DB_VERSION) {
     init {
         // Extraction writes arrive in bursts while the UI simultaneously reads counters/results.
         // WAL reduces writer/reader contention without changing the logical database model.
