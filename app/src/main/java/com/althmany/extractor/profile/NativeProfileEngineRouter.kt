@@ -19,21 +19,55 @@ object NativeProfileEngineRouter {
         val profile = RuntimeProfileDetector.detect(context)
         val access = AccessibilityRuntimeBridge.currentEvenIfQuiet() != null
         val shizuku = runCatching { ShizukuBridge.status().ready }.getOrDefault(false)
-        val recommended = when {
-            access -> RuntimeBackendKind.ACCESSIBILITY
-            shizuku -> RuntimeBackendKind.SHIZUKU
-            else -> RuntimeBackendKind.NONE
+        val preference = UnifiedRuntimeTargetStore.preference(context)
+        val remote = UnifiedRuntimeTargetStore.isRemoteTarget(context)
+        val remoteUser = UnifiedRuntimeTargetStore.selectedAndroidUserId(context)
+
+        val recommended = if (remote) {
+            when {
+                preference == RuntimeBackendPreference.ACCESSIBILITY -> RuntimeBackendKind.NONE
+                shizuku -> RuntimeBackendKind.SHIZUKU
+                else -> RuntimeBackendKind.NONE
+            }
+        } else {
+            when (preference) {
+                RuntimeBackendPreference.ACCESSIBILITY ->
+                    if (access) RuntimeBackendKind.ACCESSIBILITY else RuntimeBackendKind.NONE
+                RuntimeBackendPreference.SHIZUKU ->
+                    if (shizuku) RuntimeBackendKind.SHIZUKU else RuntimeBackendKind.NONE
+                RuntimeBackendPreference.AUTO -> when {
+                    access -> RuntimeBackendKind.ACCESSIBILITY
+                    shizuku -> RuntimeBackendKind.SHIZUKU
+                    else -> RuntimeBackendKind.NONE
+                }
+            }
         }
-        val reason = when (recommended) {
-            RuntimeBackendKind.ACCESSIBILITY ->
-                "Accessibility service instance حي داخل نفس Profile"
-            RuntimeBackendKind.SHIZUKU ->
-                "Shizuku لديه Binder+إذن؛ UIAutomation يُثبت عند بدء العملية"
-            RuntimeBackendKind.NONE ->
-                "لا يوجد Accessibility runtime حي ولا Shizuku جاهز"
+
+        val reason = when {
+            remote && preference == RuntimeBackendPreference.ACCESSIBILITY ->
+                "الهدف Android user $remoteUser بعيد؛ يحتاج Shizuku"
+            remote && shizuku ->
+                "Shizuku جاهز للهدف البعيد Android user $remoteUser"
+            remote ->
+                "الهدف Android user $remoteUser يحتاج Shizuku جاهزاً"
+            preference == RuntimeBackendPreference.ACCESSIBILITY && !access ->
+                "Accessibility محددة يدويًا لكنها غير متصلة داخل ${profile.labelAr}"
+            preference == RuntimeBackendPreference.SHIZUKU && !shizuku ->
+                "Shizuku محدد يدويًا لكنه غير جاهز داخل ${profile.labelAr}"
+            recommended == RuntimeBackendKind.ACCESSIBILITY ->
+                "Accessibility service حي داخل ${profile.labelAr}"
+            recommended == RuntimeBackendKind.SHIZUKU ->
+                "Shizuku جاهز؛ UIAutomation سيستخدم نفس Target Lock"
+            else ->
+                "لا يوجد Backend جاهز للبيئة الحالية"
         }
+
         return NativeProfileEngineSnapshot(
-            profile.profileKey, access, shizuku, recommended, reason
+            profileKey = if (remote) "REMOTE:$remoteUser" else profile.profileKey,
+            accessibilityLocalReady = access,
+            shizukuReady = shizuku,
+            recommended = recommended,
+            reason = reason
         )
     }
 }

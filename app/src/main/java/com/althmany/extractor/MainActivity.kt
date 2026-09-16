@@ -95,6 +95,8 @@ class MainActivity : ComponentActivity() {
 private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoinCoordinator) {
     val context = LocalContext.current
     val engine by viewModel.engineState.collectAsState()
+    val runtimeTarget by viewModel.runtimeTarget.collectAsState()
+    val remoteRuntimeTargets by viewModel.remoteRuntimeTargets.collectAsState()
     val joinState by joinCoordinator.state.collectAsState()
     val groups by viewModel.groups.collectAsState()
     val links by viewModel.links.collectAsState()
@@ -272,12 +274,18 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                 AppScreen.HOME -> V341HomeScreen(
                     padding = zero,
                     engine = engine,
+                    runtime = runtimeTarget,
                     scan = scanState,
                     publish = publishState,
                     onExtract = { screen = AppScreen.EXTRACT },
                     onScan = { viewModel.importScanLinksFromExtraction(); screen = AppScreen.SCAN },
                     onPublish = { viewModel.reloadPublishItems(); screen = AppScreen.PUBLISH },
                     onAutoJoin = { screen = AppScreen.JOIN },
+                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                    onBackendPreference = viewModel::setRuntimeBackendPreference,
+                    remoteTargets = remoteRuntimeTargets,
+                    onDiscoverRemoteTargets = viewModel::discoverRemoteRuntimeTargets,
+                    onRemoteTarget = viewModel::setRemoteRuntimeTarget,
                     onStart = viewModel::startExtractionSmart,
                     onPause = viewModel::pauseActiveOperation,
                     onResume = viewModel::resumeActiveOperation,
@@ -288,9 +296,11 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                 AppScreen.EXTRACT -> V341ExtractionScreen(
                     padding = zero,
                     engine = engine,
+                    runtime = runtimeTarget,
                     groups = groups,
                     accessibilityEnabled = isAccessibilityServiceEnabled(context),
                     onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                    onBackendPreference = viewModel::setRuntimeBackendPreference,
                     onMode = viewModel::setMode,
                     onSpeed = viewModel::setSpeed,
                     onRounds = viewModel::setMaxRounds,
@@ -309,8 +319,10 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                 AppScreen.JOIN -> ProfessionalJoinScreen(
                     padding = zero,
                     engine = engine,
+                    runtime = runtimeTarget,
                     join = joinState,
                     onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                    onBackendPreference = viewModel::setRuntimeBackendPreference,
                     onDraft = joinCoordinator::setDraft,
                     onImportFile = {
                         openJoinFile.launch(
@@ -326,16 +338,17 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                     onStart = joinCoordinator::start,
                     onPause = joinCoordinator::pause,
                     onResume = joinCoordinator::resume,
-                    onStop = joinCoordinator::stop,
-                    onAdvancedTargets = joinCoordinator::openAdvancedTargetManager
+                    onStop = joinCoordinator::stop
                 )
 
                 AppScreen.SCAN -> ProfessionalScanScreen(
                     padding = zero,
                     engine = engine,
+                    runtime = runtimeTarget,
                     scan = scanState,
                     scanItems = scanItems,
                     onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                    onBackendPreference = viewModel::setRuntimeBackendPreference,
                     onAddLinks = viewModel::addScanLinks,
                     onImportExtraction = viewModel::importScanLinksFromExtraction,
                     onImportFile = {
@@ -365,9 +378,11 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                 AppScreen.PUBLISH -> V341PublishScreen(
                     padding = zero,
                     engine = engine,
+                    runtime = runtimeTarget,
                     publish = publishState,
                     groups = groups,
                     onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                    onBackendPreference = viewModel::setRuntimeBackendPreference,
                     onGroups = { screen = AppScreen.GROUPS },
                     onDraft = viewModel::setPublishDraft,
                     onContentMode = viewModel::setPublishContentMode,

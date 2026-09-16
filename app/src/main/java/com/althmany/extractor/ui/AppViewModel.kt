@@ -6,7 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.althmany.extractor.ExtractorFeatureRuntime
 import com.althmany.groupmanager.GroupManagerApp
 import com.althmany.groupmanager.model.PreferredTarget
+import com.althmany.groupmanager.model.AutomationBackend
 import com.althmany.groupmanager.util.WhatsAppLauncher
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRemoteTarget
+import com.althmany.extractor.profile.UnifiedRuntimeSnapshot
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
 import com.althmany.extractor.data.ExtractionMode
 import com.althmany.extractor.data.LinkRecord
 import com.althmany.extractor.data.ExtractionLog
@@ -36,11 +41,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val repo = ExtractorFeatureRuntime.repository
+    private val repo get() = ExtractorFeatureRuntime.repository
 
     val engineState: StateFlow<ExtractionUiState> = ExtractionController.state
     val scanState: StateFlow<ScanUiState> = ScanController.state
     val publishState: StateFlow<PublishUiState> = PublishController.state
+
+    private val _runtimeTarget = MutableStateFlow(
+        UnifiedRuntimeTargetStore.resolve(
+            application,
+            ExtractionController.state.value.selectedWhatsAppPackage
+        )
+    )
+    val runtimeTarget: StateFlow<UnifiedRuntimeSnapshot> = _runtimeTarget.asStateFlow()
+
+    private val _remoteRuntimeTargets = MutableStateFlow<List<UnifiedRemoteTarget>>(emptyList())
+    val remoteRuntimeTargets: StateFlow<List<UnifiedRemoteTarget>> = _remoteRuntimeTargets.asStateFlow()
 
     private val _groups = MutableStateFlow<List<TargetGroup>>(emptyList())
     val groups: StateFlow<List<TargetGroup>> = _groups.asStateFlow()
@@ -63,6 +79,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var globalJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            engineState.collect { state ->
+                _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+                    getApplication<Application>(),
+                    state.selectedWhatsAppPackage
+                )
+            }
+        }
         refresh()
         viewModelScope.launch {
             var lastIndex = -1
@@ -338,16 +362,127 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setExtractionRetries(value: Int) = ExtractionController.setMaxSameGroupRetries(value)
     fun setExtractionDelayMs(value: Long) = ExtractionController.setBetweenItemsDelayMs(value)
     fun setTargetWhatsApp(packageName: String) {
+        val activeSender = (getApplication<Application>() as? GroupManagerApp)
+            ?.preferences?.accessibilityBatchRunning == true
+        if (activeSender) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير نسخة واتساب"
+            return
+        }
         ExtractionController.setTargetWhatsAppPackage(packageName)
-        val senderApp = getApplication<Application>() as? GroupManagerApp ?: return
-        val discovered = WhatsAppLauncher.discoverWhatsAppApps(senderApp)
-            .firstOrNull { it.packageName == packageName }
-        senderApp.preferences.clearRemoteSecureTarget()
-        senderApp.preferences.selectedWhatsAppPackage = packageName
-        senderApp.preferences.selectedWhatsAppLabel = discovered?.label ?: packageName
-        senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+        UnifiedRuntimeTargetStore.setLocalTarget(getApplication<Application>(), packageName)
+        if (!ExtractorFeatureRuntime.switchRuntimeEnvironment(getApplication<Application>())) {
+            _message.value = "تعذر تبديل بيئة البيانات أثناء وجود عملية نشطة"
+            return
+        }
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp != null) {
+            val discovered = WhatsAppLauncher.discoverWhatsAppApps(senderApp)
+                .firstOrNull { it.packageName == packageName }
+            senderApp.preferences.clearRemoteSecureTarget()
+            senderApp.preferences.selectedWhatsAppPackage = packageName
+            senderApp.preferences.selectedWhatsAppLabel = discovered?.label ?: packageName
+            senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+        }
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(getApplication<Application>(), packageName)
+        refresh()
     }
-    fun refreshRuntimeEnvironment() = ExtractionController.refreshRuntimeEnvironment()
+
+    fun discoverRemoteRuntimeTargets() {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل اكتشاف بيئات Android الأخرى"
+            return
+        }
+        viewModelScope.launch {
+            _message.value = "جارٍ اكتشاف Dual Messenger / Work Profile / Secure Folder عبر Shizuku…"
+            val result = runCatching {
+                UnifiedRuntimeTargetStore.discoverRemoteTargets(getApplication<Application>())
+            }
+            val targets = result.getOrElse {
+                _message.value = "فشل اكتشاف البيئات: ${it.message.orEmpty()}"
+                emptyList()
+            }
+            _remoteRuntimeTargets.value = targets
+            _message.value = if (targets.isEmpty()) {
+                "لم يجد Shizuku بيئة واتساب أخرى قابلة للتحقق"
+            } else {
+                "تم اكتشاف ${targets.size} هدف واتساب في بيئات Android أخرى"
+            }
+        }
+    }
+
+    fun setRemoteRuntimeTarget(target: UnifiedRemoteTarget) {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تغيير بيئة التشغيل"
+            return
+        }
+        val senderAppBeforeSwitch = getApplication<Application>() as? GroupManagerApp
+        if (senderAppBeforeSwitch?.preferences?.accessibilityBatchRunning == true) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير بيئة التشغيل"
+            return
+        }
+        UnifiedRuntimeTargetStore.setRemoteTarget(getApplication<Application>(), target)
+        if (!ExtractorFeatureRuntime.switchRuntimeEnvironment(getApplication<Application>())) {
+            _message.value = "تعذر تبديل بيئة البيانات أثناء وجود عملية نشطة"
+            return
+        }
+        ExtractionController.refreshRuntimeEnvironment()
+
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp != null) {
+            senderApp.preferences.setRemoteSecureTarget(
+                target.androidUserId,
+                target.packageName,
+                target.environmentLabel
+            )
+            senderApp.preferences.automationBackend = AutomationBackend.SHIZUKU
+            senderApp.preferences.runtimeAutomationBackend = AutomationBackend.SHIZUKU
+            senderApp.preferences.selectedWhatsAppPackage = target.packageName
+            senderApp.preferences.selectedWhatsAppLabel = target.whatsappLabel
+            senderApp.preferences.preferredTarget = PreferredTarget.AUTO
+        }
+
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(getApplication<Application>())
+        refresh()
+        _message.value = "تم اختيار ${target.environmentLabel} • ${target.whatsappLabel} عبر Shizuku"
+    }
+
+    fun setRuntimeBackendPreference(value: RuntimeBackendPreference) {
+        if (ExtractionController.isBusy() || ScanController.isRunning() || PublishController.isRunning()) {
+            _message.value = "أوقف العملية الحالية قبل تغيير محرك التشغيل"
+            return
+        }
+        val senderApp = getApplication<Application>() as? GroupManagerApp
+        if (senderApp?.preferences?.accessibilityBatchRunning == true) {
+            _message.value = "أوقف الانضمام الحالي قبل تغيير محرك التشغيل"
+            return
+        }
+        if (_runtimeTarget.value.remoteTarget && value == RuntimeBackendPreference.ACCESSIBILITY) {
+            _message.value = "الهدف في Android user آخر يحتاج Shizuku؛ Accessibility تعمل داخل الملف المحلي فقط"
+            return
+        }
+        UnifiedRuntimeTargetStore.setPreference(getApplication<Application>(), value)
+        (getApplication<Application>() as? GroupManagerApp)?.preferences?.let { prefs ->
+            prefs.automationBackend = when (value) {
+                RuntimeBackendPreference.AUTO -> AutomationBackend.AUTO
+                RuntimeBackendPreference.ACCESSIBILITY -> AutomationBackend.ACCESSIBILITY
+                RuntimeBackendPreference.SHIZUKU -> AutomationBackend.SHIZUKU
+            }
+        }
+        ExtractionController.refreshRuntimeEnvironment()
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+            getApplication<Application>(),
+            engineState.value.selectedWhatsAppPackage
+        )
+        _message.value = "تم اختيار محرك التشغيل: ${value.labelAr}"
+    }
+
+    fun refreshRuntimeEnvironment() {
+        ExtractionController.refreshRuntimeEnvironment()
+        _runtimeTarget.value = UnifiedRuntimeTargetStore.resolve(
+            getApplication<Application>(),
+            engineState.value.selectedWhatsAppPackage
+        )
+    }
 
     /** Global controls used by every screen. Only the engine that currently owns WhatsApp reacts. */
     fun pauseActiveOperation() {

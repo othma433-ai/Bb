@@ -28,7 +28,10 @@ import com.althmany.extractor.engine.ExtractionUiState
 import com.althmany.extractor.engine.ScanSpeedProfile
 import com.althmany.extractor.engine.ScanUiState
 import com.althmany.extractor.export.ExportFormat
+import com.althmany.extractor.export.ScanResultOrganizer
 import com.althmany.extractor.join.OriginalJoinUiState
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRuntimeSnapshot
 
 private val PBg = Color(0xFF020B13)
 private val PBg2 = Color(0xFF061522)
@@ -56,7 +59,7 @@ private fun PCard(
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.78f))
     ) {
-        Column(Modifier.padding(14.dp), content = content)
+        Column(Modifier.padding(16.dp), content = content)
     }
 }
 
@@ -169,54 +172,6 @@ private fun PStat(
         ) {
             Text(value, color = tint, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
             Text(label, color = PText, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2)
-        }
-    }
-}
-
-@Composable
-private fun PTargetSelector(
-    engine: ExtractionUiState,
-    onTargetWhatsApp: (String) -> Unit,
-    onAdvancedTargets: (() -> Unit)? = null
-) {
-    PCard {
-        PSectionTitle("نسخة واتساب المستهدفة", Icons.Default.Chat)
-        Spacer(Modifier.height(8.dp))
-
-        val targets = engine.availableWhatsApp.filter { it.launchable }
-        if (targets.isEmpty()) {
-            Text(
-                "لم يتم اكتشاف نسخة واتساب قابلة لفتح روابط الدعوة في هذا Android Profile.",
-                color = PMuted,
-                fontSize = 11.sp,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.End
-            )
-        } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(targets, key = { it.packageName }) { instance ->
-                    PChoice(
-                        text = "${instance.labelAr}\n${instance.packageName}",
-                        selected = engine.selectedWhatsAppPackage == instance.packageName,
-                        tint = PCyan,
-                        modifier = Modifier.width(165.dp)
-                    ) { onTargetWhatsApp(instance.packageName) }
-                }
-            }
-        }
-
-        if (onAdvancedTargets != null) {
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onAdvancedTargets,
-                modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, PPurple),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.Settings, null, tint = PPurple)
-                Spacer(Modifier.width(6.dp))
-                Text("إدارة Work Profile / Secure Folder / Dual Messenger", color = PText, fontSize = 11.sp)
-            }
         }
     }
 }
@@ -354,15 +309,16 @@ private fun PControl(
 fun ProfessionalJoinScreen(
     padding: PaddingValues,
     engine: ExtractionUiState,
+    runtime: UnifiedRuntimeSnapshot,
     join: OriginalJoinUiState,
     onTargetWhatsApp: (String) -> Unit,
+    onBackendPreference: (RuntimeBackendPreference) -> Unit,
     onDraft: (String) -> Unit,
     onImportFile: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onStop: () -> Unit,
-    onAdvancedTargets: () -> Unit
+    onStop: () -> Unit
 ) {
     BoxWithConstraints(
         modifier = Modifier
@@ -370,13 +326,13 @@ fun ProfessionalJoinScreen(
             .background(Brush.verticalGradient(listOf(PBg, PBg2, PBg)))
             .padding(padding)
     ) {
-        val side = if (maxWidth >= 600.dp) 28.dp else 14.dp
+        val side = if (maxWidth >= 600.dp) 28.dp else 16.dp
         val startEnabled = join.draft.isNotBlank() || join.remaining > 0
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = side, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = side, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 PHeader(
@@ -386,13 +342,7 @@ fun ProfessionalJoinScreen(
                 )
             }
 
-            item {
-                PTargetSelector(
-                    engine = engine,
-                    onTargetWhatsApp = onTargetWhatsApp,
-                    onAdvancedTargets = onAdvancedTargets
-                )
-            }
+            item { UnifiedRuntimeStatusStrip(runtime) }
 
             item {
                 PCard(accent = PCyan.copy(alpha = .65f)) {
@@ -546,9 +496,11 @@ private fun PScanResultRow(item: ScanRecord) {
 fun ProfessionalScanScreen(
     padding: PaddingValues,
     engine: ExtractionUiState,
+    runtime: UnifiedRuntimeSnapshot,
     scan: ScanUiState,
     scanItems: List<ScanRecord>,
     onTargetWhatsApp: (String) -> Unit,
+    onBackendPreference: (RuntimeBackendPreference) -> Unit,
     onAddLinks: (String) -> Unit,
     onImportExtraction: () -> Unit,
     onImportFile: () -> Unit,
@@ -569,14 +521,14 @@ fun ProfessionalScanScreen(
             .background(Brush.verticalGradient(listOf(PBg, PBg2, PBg)))
             .padding(padding)
     ) {
-        val side = if (maxWidth >= 600.dp) 28.dp else 14.dp
+        val side = if (maxWidth >= 600.dp) 28.dp else 16.dp
         val startEnabled = (scanItems.isNotEmpty() || text.isNotBlank()) &&
             engine.selectedWhatsAppPackage != null
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = side, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = side, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 PHeader(
@@ -586,7 +538,7 @@ fun ProfessionalScanScreen(
                 )
             }
 
-            item { PTargetSelector(engine, onTargetWhatsApp) }
+            item { UnifiedRuntimeStatusStrip(runtime) }
 
             item {
                 PCard(accent = PCyan.copy(alpha = .65f)) {
@@ -680,6 +632,28 @@ fun ProfessionalScanScreen(
             }
 
             item {
+                PCard(accent = if (scan.running) PGreen.copy(alpha = .65f) else PLine) {
+                    PSectionTitle("حالة الفحص", Icons.Default.Bolt, if (scan.running) PGreen else PCyan)
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        "${scan.status.name} • ${scan.currentIndex}/${scan.total} • ثقة ${scan.currentConfidence}%",
+                        color = PMuted,
+                        fontSize = 10.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.End
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        scan.message,
+                        color = PText,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.End
+                    )
+                }
+            }
+
+            item {
                 PSectionTitle("تصنيف الروابط", Icons.Default.BarChart)
                 Spacer(Modifier.height(7.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -698,7 +672,7 @@ fun ProfessionalScanScreen(
                     PCard {
                         PSectionTitle("نتائج الفحص", Icons.Default.Search)
                         Spacer(Modifier.height(8.dp))
-                        scanItems.take(20).forEach { record ->
+                        ScanResultOrganizer.sorted(scanItems).take(20).forEach { record ->
                             PScanResultRow(record)
                             Spacer(Modifier.height(6.dp))
                         }

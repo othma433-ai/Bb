@@ -26,7 +26,11 @@ import com.althmany.extractor.shizuku.ShizukuBridge
 import com.althmany.extractor.shizuku.ShizukuUiRuntime
 import com.althmany.extractor.shizuku.ShizukuUiTree
 import com.althmany.extractor.profile.RuntimeBackendKind
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
 import com.althmany.extractor.profile.WhatsAppInstanceRegistry
+import com.althmany.extractor.profile.WhatsAppInstance
+import com.althmany.extractor.profile.WhatsAppInstanceKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.CoroutineScope
@@ -133,10 +137,40 @@ object ExtractionController {
     fun refreshRuntimeEnvironment() {
         if (!::appContext.isInitialized || !::settingsStore.isInitialized) return
         val profile = RuntimeProfileDetector.detect(appContext)
-        val available = WhatsAppInstanceRegistry.launchable(appContext, forceRefresh = true)
+        val localAvailable = WhatsAppInstanceRegistry.launchable(appContext, forceRefresh = true)
+        val remote = UnifiedRuntimeTargetStore.isRemoteTarget(appContext)
+        val remotePackage = UnifiedRuntimeTargetStore.selectedPackage(appContext)
+        val remoteUserId = UnifiedRuntimeTargetStore.selectedAndroidUserId(appContext)
+        val runtimeSnapshot = UnifiedRuntimeTargetStore.resolve(appContext)
+
+        val available = if (remote && !remotePackage.isNullOrBlank()) {
+            (
+                localAvailable + WhatsAppInstance(
+                    packageName = remotePackage,
+                    labelAr = runtimeSnapshot.selectedWhatsAppLabel,
+                    installed = true,
+                    launchable = true,
+                    kind = WhatsAppInstanceKind.DISCOVERED,
+                    official = remotePackage in setOf(
+                        WhatsAppInstanceRegistry.WHATSAPP,
+                        WhatsAppInstanceRegistry.WHATSAPP_BUSINESS
+                    ),
+                    canHandleInvite = true,
+                    profileKey = "REMOTE:$remoteUserId"
+                )
+            ).distinctBy { "${it.profileKey}:${it.packageName}" }
+        } else {
+            localAvailable
+        }
+
         val saved = settingsStore.get().targetWhatsAppPackage
-        val selected = ProfileLaunchPolicy.resolveSelected(saved, available.map { it.packageName })
+        val selected = if (remote) {
+            remotePackage
+        } else {
+            ProfileLaunchPolicy.resolveSelected(saved, available.map { it.packageName })
+        }
         if (selected != null && selected != saved) settingsStore.setTargetWhatsAppPackage(selected)
+        if (selected != null && !remote) UnifiedRuntimeTargetStore.setLocalTarget(appContext, selected)
 
         val enabledComponentPackage = enabledAccessibilityComponentPackage()
         val enabledForThisApp = enabledComponentPackage == appContext.packageName
@@ -211,6 +245,7 @@ object ExtractionController {
         val valid = _state.value.availableWhatsApp.any { it.packageName == packageName && it.launchable }
         if (!valid) return false
         settingsStore.setTargetWhatsAppPackage(packageName)
+        UnifiedRuntimeTargetStore.setLocalTarget(appContext, packageName)
         _state.value = _state.value.copy(
             selectedWhatsAppPackage = packageName,
             packageMismatch = false,
@@ -366,6 +401,7 @@ object ExtractionController {
     fun openWhatsApp(): Boolean {
         recoverLiveService()
         refreshRuntimeEnvironment()
+        if (UnifiedRuntimeTargetStore.isRemoteTarget(appContext)) return false
         val packageName = _state.value.selectedWhatsAppPackage ?: return false
         if (adapter.isWhatsAppRoot(service?.currentRoot(), packageName)) return true
         if (_state.value.availableWhatsApp.none { it.packageName == packageName && it.launchable }) return false
@@ -463,17 +499,51 @@ object ExtractionController {
         val prefs = settingsStore.get()
         val timing = ExtractionPolicy.timing(prefs.speed)
         _state.value = _state.value.copy(status = EngineStatus.SYNCING_GROUPS, message = "مزامنة القروبات من واتساب", syncFound = 0)
-        if (!openWhatsApp()) throw IllegalStateException("تعذر فتح واتساب المحدد داخل البيئة الحالية")
+        val backendPreference = UnifiedRuntimeTargetStore.preference(appContext)
+        val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext)
+        val syncPackage = requireSelectedPackage()
+        val opened = if (runtimeTarget.remoteTarget) {
+            if (backendPreference == RuntimeBackendPreference.ACCESSIBILITY) false
+            else ShizukuBridge.launchPackage(
+                appContext,
+                syncPackage,
+                runtimeTarget.targetAndroidUserId
+            )
+        } else {
+            openWhatsApp()
+        }
+        if (!opened) {
+            throw IllegalStateException(
+                if (runtimeTarget.remoteTarget)
+                    "تعذر فتح واتساب في ${runtimeTarget.environmentLabel} عبر Shizuku"
+                else
+                    "تعذر فتح واتساب المحدد داخل البيئة الحالية"
+            )
+        }
+
+        if (backendPreference == RuntimeBackendPreference.SHIZUKU) {
+            if (!ShizukuBridge.status().ready) {
+                throw IllegalStateException("Shizuku محدد كمحرك للمزامنة لكنه غير جاهز")
+            }
+            return syncGroupsViaShizuku(timing)
+        }
+
         val svc = awaitRuntimeService(1_800L)
         if (svc == null) {
-            if (ShizukuBridge.status().ready) {
+            if (backendPreference == RuntimeBackendPreference.AUTO && ShizukuBridge.status().ready) {
                 return syncGroupsViaShizuku(timing)
             }
-            throw IllegalStateException("تم فتح واتساب لكن لا Accessibility محلية ولا Shizuku جاهز داخل نفس البيئة")
+            throw IllegalStateException(
+                if (backendPreference == RuntimeBackendPreference.ACCESSIBILITY)
+                    "Accessibility محددة للمزامنة لكنها غير متصلة داخل هذه البيئة"
+                else
+                    "لا Accessibility محلية ولا Shizuku جاهز داخل نفس البيئة"
+            )
         }
-        val syncPackage = requireSelectedPackage()
         if (!awaitWhatsAppRoot(svc, syncPackage, 5_000L)) {
-            if (ShizukuBridge.status().ready) return syncGroupsViaShizuku(timing)
+            if (backendPreference == RuntimeBackendPreference.AUTO && ShizukuBridge.status().ready) {
+                return syncGroupsViaShizuku(timing)
+            }
             throw IllegalStateException("Accessibility متصلة لكن rootInActiveWindow لم يرَ واتساب المحدد خلال مهلة التشغيل")
         }
         if (!recoverChatsSurface(svc, timing, syncPackage)) {
@@ -786,23 +856,58 @@ object ExtractionController {
             )
             refreshStatsAndNotify()
 
-            if (!openWhatsApp()) {
-                failRun("لم يتم اختيار/العثور على نسخة واتساب قابلة للتشغيل داخل ${_state.value.profileInfo.labelAr}")
+            val backendPreference = UnifiedRuntimeTargetStore.preference(appContext)
+            val runtimeTarget = UnifiedRuntimeTargetStore.resolve(appContext, targetPackage)
+            val opened = if (runtimeTarget.remoteTarget) {
+                if (backendPreference == RuntimeBackendPreference.ACCESSIBILITY) false
+                else ShizukuBridge.launchPackage(
+                    appContext,
+                    targetPackage,
+                    runtimeTarget.targetAndroidUserId
+                )
+            } else {
+                openWhatsApp()
+            }
+            if (!opened) {
+                failRun(
+                    if (runtimeTarget.remoteTarget)
+                        "تعذر فتح واتساب في ${runtimeTarget.environmentLabel} عبر Shizuku"
+                    else
+                        "لم يتم اختيار/العثور على نسخة واتساب قابلة للتشغيل داخل ${_state.value.profileInfo.labelAr}"
+                )
                 return
             }
-            _state.value = _state.value.copy(status = EngineStatus.OPENING_WHATSAPP, message = "فتح ${WhatsAppInstanceRegistry.labelFor(requireSelectedPackage())} داخل ${_state.value.profileInfo.labelAr}")
+            _state.value = _state.value.copy(
+                status = EngineStatus.OPENING_WHATSAPP,
+                message = "فتح ${runtimeTarget.selectedWhatsAppLabel} داخل ${runtimeTarget.environmentLabel}"
+            )
+
+            if (backendPreference == RuntimeBackendPreference.SHIZUKU) {
+                if (!ShizukuBridge.status().ready) {
+                    failRun("SHIZUKU_NOT_READY: Shizuku محدد للاستخراج لكنه غير جاهز")
+                    return
+                }
+                _state.value = _state.value.copy(message = "بدء الاستخراج عبر Shizuku حسب بيئة التشغيل الموحدة")
+                runExtractionViaShizuku(groups, prefs, targetPackage)
+                return
+            }
+
             val liveAccessibility = awaitRuntimeService(1_500L)
             val accessibilityReady = liveAccessibility != null &&
                 awaitWhatsAppRoot(liveAccessibility, targetPackage, 1_800L)
 
             if (!accessibilityReady) {
-                if (ShizukuBridge.status().ready) {
-                    _state.value = _state.value.copy(message = "Accessibility لا ترى واتساب — التحويل الفعلي إلى Shizuku")
+                if (backendPreference == RuntimeBackendPreference.AUTO && ShizukuBridge.status().ready) {
+                    _state.value = _state.value.copy(
+                        message = "AUTO: Accessibility لا ترى واتساب — التحويل إلى Shizuku"
+                    )
                     runExtractionViaShizuku(groups, prefs, targetPackage)
                     return
                 }
                 failRun(
-                    if (liveAccessibility == null)
+                    if (backendPreference == RuntimeBackendPreference.ACCESSIBILITY)
+                        "ACCESSIBILITY_ROOT_NOT_READY: Accessibility محددة لكنها لا ترى واتساب المستهدف"
+                    else if (liveAccessibility == null)
                         "RUNTIME_NO_BACKEND: لا Accessibility محلية ولا Shizuku جاهز"
                     else
                         "ACCESSIBILITY_ROOT_NOT_READY: الخدمة متصلة لكن rootInActiveWindow لا يرى واتساب المحدد"
@@ -1477,7 +1582,7 @@ object ExtractionController {
         var tree: ShizukuUiTree =
             awaitShizukuTree(packageName, 1_200L)
                 ?: run {
-                    ShizukuBridge.launchPackage(appContext, packageName)
+                    ShizukuBridge.launchPackage(appContext, packageName, UnifiedRuntimeTargetStore.resolve(appContext, packageName).targetAndroidUserId)
                     awaitShizukuTree(packageName, 5_000L)
                         ?: throw IllegalStateException(
                             "Shizuku متصل لكن UIAutomation لا يرى واجهة واتساب المحددة في هذا Profile"

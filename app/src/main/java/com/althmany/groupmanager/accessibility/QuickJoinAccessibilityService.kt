@@ -894,6 +894,22 @@ class QuickJoinAccessibilityService : AccessibilityService() {
             RuntimeDirective.HANDLE_ACTION -> {
                 val action = screen.action ?: return
                 val actionNode = screen.actionNode ?: return
+                val pendingAction = readPendingAction(current)
+                if (pendingAction != null &&
+                    screen.evidenceConflict == ScreenEvidenceConflict.MULTIPLE_POSITIVE_ACTIONS
+                ) {
+                    app.preferences.transitionAutomation(
+                        AutomationStage.VERIFYING_RESULT,
+                        "Post-action conflict is stable; suppressing duplicate membership click and verifying result",
+                        resetRetries = false
+                    )
+                    runtimeDiagnostic(
+                        current,
+                        "POST_ACTION_DUPLICATE_SUPPRESSED",
+                        "pending=${pendingAction.name}; visible=${action.name}; conflict=${screen.evidenceConflict.name}"
+                    )
+                    return
+                }
                 resetOutcomeEvidence()
                 resetConflictEvidence()
                 homeSurfaceStableScans = 0
@@ -1265,6 +1281,19 @@ class QuickJoinAccessibilityService : AccessibilityService() {
                         resetRetries = false
                     )
                     lastClickAt = 0L
+                    requestScan()
+                }
+                inspection?.evidenceConflict == ScreenEvidenceConflict.MULTIPLE_POSITIVE_ACTIONS -> {
+                    app.preferences.transitionAutomation(
+                        AutomationStage.VERIFYING_RESULT,
+                        "Post-action WhatsApp controls are transitioning; holding instead of re-clicking",
+                        resetRetries = false
+                    )
+                    runtimeDiagnostic(
+                        current,
+                        "POST_ACTION_CONFLICT_HOLD",
+                        "action=${action.name}; conflict=${inspection.evidenceConflict.name}; waiting for stable success/pending evidence"
+                    )
                     requestScan()
                 }
                 inspection?.action == action -> {

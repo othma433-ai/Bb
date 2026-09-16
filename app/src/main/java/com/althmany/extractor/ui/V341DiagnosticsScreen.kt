@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.althmany.extractor.engine.RuntimeOperationCoordinator
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
 import com.althmany.groupmanager.GroupManagerApp
 import com.althmany.groupmanager.accessibility.AccessibilityStatus
 import com.althmany.groupmanager.shizuku.ShizukuBridge
@@ -107,6 +108,10 @@ private fun captureV341Diagnostics(context: Context): V341DiagnosticSnapshot {
     val health = RuntimeHealthMonitor.snapshot()
     val profile = ProfileEnvironment.current(context)
     val prefs = app.preferences
+    val unified = UnifiedRuntimeTargetStore.resolve(
+        context,
+        UnifiedRuntimeTargetStore.selectedPackage(context) ?: prefs.selectedWhatsAppPackage
+    )
 
     return V341DiagnosticSnapshot(
         accessibilityConfigured = readiness.systemEnabled,
@@ -117,11 +122,9 @@ private fun captureV341Diagnostics(context: Context): V341DiagnosticSnapshot {
         shizukuPermission = shizuku?.permissionGranted == true,
         shizukuReady = shizuku?.ready == true,
         shizukuUserServiceBound = shizuku?.userServiceBound == true,
-        androidProfile = profile.profileKey,
-        selectedWhatsApp = prefs.selectedWhatsAppLabel
-            ?: prefs.selectedWhatsAppPackage
-            ?: "غير محدد",
-        runtimeBackend = prefs.runtimeAutomationBackend.name,
+        androidProfile = if (unified.remoteTarget) "${unified.environmentLabel} (user ${unified.targetAndroidUserId})" else unified.profileInfo.profileKey,
+        selectedWhatsApp = unified.selectedWhatsAppLabel,
+        runtimeBackend = "${unified.preference.name} -> ${unified.effectiveBackend.name}",
         operationOwner = RuntimeOperationCoordinator.current()?.labelAr ?: "لا توجد عملية",
         automationStage = prefs.automationStage.name,
         automationDiagnostic = prefs.automationDiagnostic.ifBlank { "لا يوجد" },
@@ -163,12 +166,12 @@ fun V341DiagnosticsScreen(padding: PaddingValues, onSettings: () -> Unit) {
             .background(Brush.verticalGradient(listOf(DBg, DBg2, DBg)))
             .padding(padding)
     ) {
-        val side = if (maxWidth >= 600.dp) 28.dp else 14.dp
+        val side = if (maxWidth >= 600.dp) 28.dp else 16.dp
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = side, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = side, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 DCard(accent = DCyan) {

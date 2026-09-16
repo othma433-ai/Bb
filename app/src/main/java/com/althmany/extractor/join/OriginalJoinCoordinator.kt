@@ -5,6 +5,8 @@ import android.content.Intent
 import android.provider.Settings
 import com.althmany.extractor.engine.RuntimeOperation
 import com.althmany.extractor.engine.RuntimeOperationCoordinator
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRuntimeTargetStore
 import com.althmany.groupmanager.GroupManagerApp
 import com.althmany.groupmanager.accessibility.AccessibilityStatus
 import com.althmany.groupmanager.accessibility.QuickJoinAccessibilityService
@@ -17,7 +19,6 @@ import com.althmany.groupmanager.model.AutomationBackend
 import com.althmany.groupmanager.model.LinkSource
 import com.althmany.groupmanager.shizuku.ShizukuAutomationService
 import com.althmany.groupmanager.shizuku.ShizukuBridge
-import com.althmany.groupmanager.ui.MainActivity as SenderMainActivity
 import com.althmany.groupmanager.ui.MainEvent
 import com.althmany.groupmanager.ui.MainViewModel
 import com.althmany.groupmanager.util.AutomationScreenAwakeGuard
@@ -185,21 +186,6 @@ class OriginalJoinCoordinator(
         refresh()
     }
 
-    /**
-     * Advanced Work/Secure/Dual targeting already exists in the original Sender dashboard.
-     * We reuse it instead of duplicating Samsung/profile-specific routing code.
-     */
-    fun openAdvancedTargetManager() {
-        runCatching {
-            context.startActivity(
-                Intent(context, SenderMainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }.onFailure {
-            setMessage("تعذر فتح إدارة نسخ واتساب المتقدمة")
-        }
-    }
-
     private fun configureRunPreferences() {
         prefs.runtimeShadowMode = false
         prefs.autoAdvance = true
@@ -218,38 +204,64 @@ class OriginalJoinCoordinator(
                 prefs.accessibilityQuickJoin = false
                 return AutomationBackend.SHIZUKU
             }
-            setMessage("الملف المتقدم يحتاج Shizuku جاهزاً")
+            setMessage("الهدف البعيد يحتاج Shizuku جاهزاً")
             return null
         }
 
-        val decision = NativeProfileEngineRouter.inspect(context, prefs.automationBackend).decision
-        if (decision.runnable) {
-            val backend = decision.backend ?: return null
-            prefs.runtimeAutomationBackend = backend
-            prefs.accessibilityQuickJoin = backend == AutomationBackend.ACCESSIBILITY
-            return backend
-        }
-
-        when (decision.setupAction) {
-            NativeEngineSetupAction.ENABLE_LOCAL_ACCESSIBILITY -> {
-                setMessage("فعّل Accessibility الخاصة بالتطبيق ثم أعد المحاولة")
-                runCatching {
-                    context.startActivity(
-                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
+        return when (UnifiedRuntimeTargetStore.preference(context)) {
+            RuntimeBackendPreference.ACCESSIBILITY -> {
+                if (!AccessibilityStatus.isQuickJoinServiceConnectedLocally(context)) {
+                    setMessage("Accessibility محددة كمحرك لكنها غير متصلة داخل البيئة الحالية")
+                    null
+                } else {
+                    prefs.runtimeAutomationBackend = AutomationBackend.ACCESSIBILITY
+                    prefs.accessibilityQuickJoin = true
+                    AutomationBackend.ACCESSIBILITY
                 }
             }
-            NativeEngineSetupAction.START_OR_AUTHORIZE_SHIZUKU ->
-                setMessage("شغّل Shizuku وامنح التطبيق الإذن ثم أعد المحاولة")
-            NativeEngineSetupAction.APPLY_WORK_ACCESSIBILITY_POLICY ->
-                setMessage("ملف العمل يحتاج تهيئة Accessibility من إدارة النسخ المتقدمة")
-            NativeEngineSetupAction.BLOCKED_BY_PROFILE_POLICY ->
-                setMessage("سياسة Android Profile تمنع محرك التحكم")
-            NativeEngineSetupAction.NONE ->
-                setMessage("لا يوجد محرك تحكم جاهز")
+
+            RuntimeBackendPreference.SHIZUKU -> {
+                if (!runCatching { ShizukuBridge.status().ready }.getOrDefault(false)) {
+                    setMessage("Shizuku محدد كمحرك لكنه غير جاهز/غير مصرح")
+                    null
+                } else {
+                    prefs.runtimeAutomationBackend = AutomationBackend.SHIZUKU
+                    prefs.accessibilityQuickJoin = false
+                    AutomationBackend.SHIZUKU
+                }
+            }
+
+            RuntimeBackendPreference.AUTO -> {
+                val decision = NativeProfileEngineRouter.inspect(context, prefs.automationBackend).decision
+                if (decision.runnable) {
+                    val backend = decision.backend ?: return null
+                    prefs.runtimeAutomationBackend = backend
+                    prefs.accessibilityQuickJoin = backend == AutomationBackend.ACCESSIBILITY
+                    backend
+                } else {
+                    when (decision.setupAction) {
+                        NativeEngineSetupAction.ENABLE_LOCAL_ACCESSIBILITY -> {
+                            setMessage("فعّل Accessibility الخاصة بالتطبيق ثم أعد المحاولة")
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
+                        }
+                        NativeEngineSetupAction.START_OR_AUTHORIZE_SHIZUKU ->
+                            setMessage("شغّل Shizuku وامنح التطبيق الإذن ثم أعد المحاولة")
+                        NativeEngineSetupAction.APPLY_WORK_ACCESSIBILITY_POLICY ->
+                            setMessage("بيئة العمل تحتاج Accessibility محلية أو Shizuku جاهز")
+                        NativeEngineSetupAction.BLOCKED_BY_PROFILE_POLICY ->
+                            setMessage("سياسة Android Profile تمنع محرك التحكم")
+                        NativeEngineSetupAction.NONE ->
+                            setMessage("لا يوجد محرك تحكم جاهز")
+                    }
+                    null
+                }
+            }
         }
-        return null
     }
 
     private fun validateAndLockTarget(dryRun: Boolean): Boolean {

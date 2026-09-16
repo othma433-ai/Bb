@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.sp
 import com.althmany.extractor.data.*
 import com.althmany.extractor.engine.*
 import com.althmany.extractor.export.ExportFormat
+import com.althmany.extractor.profile.RuntimeBackendPreference
+import com.althmany.extractor.profile.UnifiedRemoteTarget
+import com.althmany.extractor.profile.UnifiedRuntimeSnapshot
 
 private val VBg = Color(0xFF020B13)
 private val VBg2 = Color(0xFF061522)
@@ -51,10 +54,10 @@ private fun VCard(
     Surface(
         modifier = modifier,
         color = VPanel,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.85f))
     ) {
-        Column(Modifier.padding(14.dp), content = content)
+        Column(Modifier.padding(16.dp), content = content)
     }
 }
 
@@ -111,7 +114,6 @@ private fun VHeader(title: String, subtitle: String, engine: ExtractionUiState, 
             }
         }
 
-        VConnection(engine)
     }
 }
 
@@ -293,12 +295,18 @@ private fun extractionBusy(engine: ExtractionUiState): Boolean = engine.status i
 fun V341HomeScreen(
     padding: PaddingValues,
     engine: ExtractionUiState,
+    runtime: UnifiedRuntimeSnapshot,
     scan: ScanUiState,
     publish: PublishUiState,
     onExtract: () -> Unit,
     onScan: () -> Unit,
     onPublish: () -> Unit,
     onAutoJoin: () -> Unit,
+    onTargetWhatsApp: (String) -> Unit,
+    onBackendPreference: (RuntimeBackendPreference) -> Unit,
+    remoteTargets: List<UnifiedRemoteTarget>,
+    onDiscoverRemoteTargets: () -> Unit,
+    onRemoteTarget: (UnifiedRemoteTarget) -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -310,10 +318,21 @@ fun V341HomeScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { VHeader("مرحباً بك", "كل ما تحتاجه لإدارة مجموعاتك في مكان واحد", engine, Icons.Default.Home) }
+        item {
+            UnifiedRuntimeCard(
+                engine = engine,
+                runtime = runtime,
+                onTargetWhatsApp = onTargetWhatsApp,
+                onBackendPreference = onBackendPreference,
+                remoteTargets = remoteTargets,
+                onDiscoverRemoteTargets = onDiscoverRemoteTargets,
+                onRemoteTarget = onRemoteTarget
+            )
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 VFeature("الانضمام", "الانضمام التلقائي للمجموعات", Icons.Default.Groups, VPurple, Modifier.weight(1f), onAutoJoin)
@@ -356,8 +375,8 @@ private fun VFeature(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier.height(126.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        modifier.height(112.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
         color = tint.copy(alpha = .12f),
         border = BorderStroke(1.dp, tint.copy(alpha = .7f))
     ) {
@@ -400,8 +419,8 @@ fun V341JoinScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { VHeader("الانضمام", "الانضمام التلقائي إلى القروبات والروابط المحددة", engine, Icons.Default.Groups) }
         item {
@@ -530,9 +549,11 @@ fun V341JoinScreen(
 fun V341ExtractionScreen(
     padding: PaddingValues,
     engine: ExtractionUiState,
+    runtime: UnifiedRuntimeSnapshot,
     groups: List<TargetGroup>,
     accessibilityEnabled: Boolean,
     onTargetWhatsApp: (String) -> Unit,
+    onBackendPreference: (RuntimeBackendPreference) -> Unit,
     onMode: (ExtractionMode) -> Unit,
     onSpeed: (SpeedProfile) -> Unit,
     onRounds: (Int) -> Unit,
@@ -554,10 +575,11 @@ fun V341ExtractionScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { VHeader("الاستخراج", "استخراج الروابط من القروبات والمحادثات", engine, Icons.Default.Link) }
+        item { UnifiedRuntimeStatusStrip(runtime) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -734,8 +756,8 @@ fun V341ScanScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { VHeader("الفحص", "التحقق من الروابط وتصنيفها", engine, Icons.Default.Search) }
         item {
@@ -849,9 +871,11 @@ fun V341ScanScreen(
 fun V341PublishScreen(
     padding: PaddingValues,
     engine: ExtractionUiState,
+    runtime: UnifiedRuntimeSnapshot,
     publish: PublishUiState,
     groups: List<TargetGroup>,
     onTargetWhatsApp: (String) -> Unit,
+    onBackendPreference: (RuntimeBackendPreference) -> Unit,
     onGroups: () -> Unit,
     onDraft: (String) -> Unit,
     onContentMode: (PublishContentMode) -> Unit,
@@ -871,10 +895,11 @@ fun V341PublishScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(vBrush()).padding(padding),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { VHeader("النشر", "إرسال الرسائل إلى القروبات المحددة", engine, Icons.Default.Send) }
+        item { UnifiedRuntimeStatusStrip(runtime) }
         item {
             VCard {
                 VTitle("القروبات المستهدفة", Icons.Default.Groups)
