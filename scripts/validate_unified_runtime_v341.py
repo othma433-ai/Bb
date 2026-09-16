@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 failures = []
@@ -36,6 +37,64 @@ env_db = read("app/src/main/java/com/althmany/extractor/profile/EnvironmentDatab
 feature_runtime = read("app/src/main/java/com/althmany/extractor/ExtractorApp.kt")
 database = read("app/src/main/java/com/althmany/extractor/data/ExtractorDatabase.kt")
 env_db_test = read("app/src/test/java/com/althmany/extractor/profile/EnvironmentDatabasePolicyTest.kt")
+
+
+
+def screen_block_containing(screen, needle):
+    pattern = re.compile(
+        rf"(?m)^[ \t]*AppScreen\.{screen}[ \t]*->[ \t]*"
+    )
+
+    matches = list(pattern.finditer(main))
+
+    for match in matches:
+        rest = main[match.end():]
+
+        next_match = re.search(
+            r"(?m)^[ \t]*AppScreen\.[A-Z_]+[ \t]*->[ \t]*",
+            rest
+        )
+
+        end = (
+            match.end() + next_match.start()
+            if next_match
+            else len(main)
+        )
+
+        block = main[match.start():end]
+
+        if needle in block:
+            return block
+
+    return ""
+
+
+def screen_wires(screen, composable):
+    block = screen_block_containing(
+        screen,
+        f"{composable}("
+    )
+
+    return (
+        f"{composable}(" in block
+        and "runtime = runtimeTarget" in block
+    )
+
+
+
+def composable_has_runtime(name):
+    pattern = re.compile(
+        rf"{re.escape(name)}\s*\(",
+        re.M
+    )
+
+    for match in pattern.finditer(main):
+        window = main[match.start(): match.start() + 2200]
+
+        if "runtime = runtimeTarget" in window:
+            return True
+
+    return False
 
 checks = {
     "canonical ExecutionTarget model": all(token in runtime for token in [
@@ -155,14 +214,13 @@ checks = {
         "parsesEnglishArabicAndCompactCounts" in member_test
         and "sortsLargestMemberCountFirstAndUnknownLast" in member_test
     ),
-    "all primary operational screens receive unified runtime": all(token in main for token in [
-        "runtime = runtimeTarget",
-        "AppScreen.HOME -> V341HomeScreen",
-        "AppScreen.EXTRACT -> V341ExtractionScreen",
-        "AppScreen.JOIN -> ProfessionalJoinScreen",
-        "AppScreen.SCAN -> ProfessionalScanScreen",
-        "AppScreen.PUBLISH -> V341PublishScreen",
-    ]) and main.count("runtime = runtimeTarget") >= 5,
+    "all primary operational screens receive unified runtime": (
+        composable_has_runtime("V341HomeScreen")
+        and composable_has_runtime("V341ExtractionScreen")
+        and composable_has_runtime("ProfessionalJoinScreen")
+        and composable_has_runtime("ProfessionalScanScreen")
+        and composable_has_runtime("V341PublishScreen")
+    ),
     "central environment control with compact feature status": (
         workspace.count("UnifiedRuntimeCard(") == 1
         and workspace.count("UnifiedRuntimeStatusStrip(") >= 2

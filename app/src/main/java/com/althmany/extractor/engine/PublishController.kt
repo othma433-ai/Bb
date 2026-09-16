@@ -413,7 +413,10 @@ object PublishController {
 
     fun refreshStats(runId: Long? = _state.value.activeRunId) {
         if (runId == null) return
-        scope.launch { _state.value = _state.value.copy(stats = repository.publishStats(runId)) }
+        scope.launch {
+            val stats = kotlinx.coroutines.withContext(Dispatchers.IO) { repository.publishStats(runId) }
+            _state.value = _state.value.copy(stats = stats)
+        }
     }
 
     private suspend fun runPublish(runId: Long) {

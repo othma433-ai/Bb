@@ -68,7 +68,7 @@ private fun VTitle(title: String, icon: ImageVector, tint: Color = VCyan) {
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = VText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = VText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(6.dp))
         Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
     }
@@ -88,7 +88,7 @@ private fun VHeader(title: String, subtitle: String, engine: ExtractionUiState, 
                 Text(
                     "إدارة الروابط، الانضمام، الاستخراج، الفحص، النشر",
                     color = VMuted,
-                    fontSize = 11.sp
+                    fontSize = 13.sp
                 )
             }
             Icon(Icons.Default.Settings, null, tint = VText, modifier = Modifier.size(24.dp))
@@ -109,7 +109,7 @@ private fun VHeader(title: String, subtitle: String, engine: ExtractionUiState, 
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                     Text(title, color = VText, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(subtitle, color = VMuted, fontSize = 10.sp, textAlign = TextAlign.End)
+                    Text(subtitle, color = VMuted, fontSize = 12.sp, textAlign = TextAlign.End)
                 }
             }
         }
@@ -152,8 +152,8 @@ private fun VStatus(label: String, value: String, good: Boolean, modifier: Modif
         border = BorderStroke(1.dp, if (good) VCyan.copy(alpha = .55f) else VLine)
     ) {
         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = VText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text(value, color = if (good) VGreen else VMuted, fontSize = 11.sp)
+            Text(label, color = VText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = if (good) VGreen else VMuted, fontSize = 13.sp)
         }
     }
 }
@@ -176,7 +176,7 @@ private fun VChoice(
             Text(
                 label,
                 color = if (selected) tint else VText,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2
@@ -195,7 +195,7 @@ private fun VStat(label: String, value: String, tint: Color, modifier: Modifier)
     ) {
         Column(Modifier.padding(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = tint, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-            Text(label, color = VText, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2)
+            Text(label, color = VText, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2)
         }
     }
 }
@@ -243,7 +243,7 @@ private fun VControl(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(icon, null, tint = if (enabled) tint else VMuted, modifier = Modifier.size(17.dp))
-            Text(label, color = if (enabled) VText else VMuted, fontSize = 10.sp)
+            Text(label, color = if (enabled) VText else VMuted, fontSize = 12.sp)
         }
     }
 }
@@ -264,7 +264,7 @@ fun V341BottomBar(current: AppScreen, onNavigate: (AppScreen) -> Unit) {
                 selected = current == screen,
                 onClick = { onNavigate(screen) },
                 icon = { Icon(icon, null, modifier = Modifier.size(19.dp)) },
-                label = { Text(label, fontSize = 10.sp) },
+                label = { Text(label, fontSize = 12.sp) },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = VCyan,
                     selectedTextColor = VCyan,
@@ -306,6 +306,7 @@ fun V341HomeScreen(
     onBackendPreference: (RuntimeBackendPreference) -> Unit,
     remoteTargets: List<UnifiedRemoteTarget>,
     onDiscoverRemoteTargets: () -> Unit,
+    onRefreshTargets: () -> Unit,
     onRemoteTarget: (UnifiedRemoteTarget) -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
@@ -328,6 +329,7 @@ fun V341HomeScreen(
                 runtime = runtime,
                 onTargetWhatsApp = onTargetWhatsApp,
                 onBackendPreference = onBackendPreference,
+                onRefresh = onRefreshTargets,
                 remoteTargets = remoteTargets,
                 onDiscoverRemoteTargets = onDiscoverRemoteTargets,
                 onRemoteTarget = onRemoteTarget
@@ -387,8 +389,8 @@ private fun VFeature(
         ) {
             Icon(icon, null, tint = tint, modifier = Modifier.size(31.dp))
             Spacer(Modifier.height(8.dp))
-            Text(title, color = VText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = VMuted, fontSize = 11.sp, textAlign = TextAlign.End, maxLines = 2)
+            Text(title, color = VText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = VMuted, fontSize = 13.sp, textAlign = TextAlign.End, maxLines = 2)
         }
     }
 }
@@ -447,7 +449,7 @@ fun V341JoinScreen(
                     value = text,
                     onValueChange = { text = it.take(16000) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 115.dp),
-                    placeholder = { Text("ألصق روابط الدعوة هنا...\nرابط واحد في كل سطر", color = VMuted, fontSize = 11.sp) },
+                    placeholder = { Text("ألصق روابط الدعوة هنا...\nرابط واحد في كل سطر", color = VMuted, fontSize = 13.sp) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
                         unfocusedBorderColor = VLine,
@@ -463,12 +465,12 @@ fun V341JoinScreen(
                         enabled = text.isNotBlank(),
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(1.dp, VCyan)
-                    ) { Text("إضافة", color = VText, fontSize = 10.sp) }
+                    ) { Text("إضافة", color = VText, fontSize = 12.sp) }
                     OutlinedButton(onClick = onImportFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VBlue)) {
-                        Text("استيراد ملف", color = VText, fontSize = 10.sp)
+                        Text("استيراد ملف", color = VText, fontSize = 12.sp)
                     }
                     OutlinedButton(onClick = onImportExtraction, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VPurple)) {
-                        Text("من الاستخراج", color = VText, fontSize = 10.sp)
+                        Text("من الاستخراج", color = VText, fontSize = 12.sp)
                     }
                 }
             }
@@ -598,7 +600,7 @@ fun V341ExtractionScreen(
                 ) {
                     Icon(Icons.Default.Sync, null, tint = VBlue)
                     Spacer(Modifier.width(4.dp))
-                    Text("مزامنة القروبات", color = VText, fontSize = 11.sp)
+                    Text("مزامنة القروبات", color = VText, fontSize = 13.sp)
                 }
             }
         }
@@ -635,7 +637,7 @@ fun V341ExtractionScreen(
                     onValueChange = { query = it.take(80) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("البحث في القروبات...", color = VMuted, fontSize = 11.sp) },
+                    placeholder = { Text("البحث في القروبات...", color = VMuted, fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = VCyan) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
@@ -649,7 +651,7 @@ fun V341ExtractionScreen(
                 Text(
                     "تم تحديد ${groups.count { it.selected }} من ${groups.size}",
                     color = VCyan,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.End
                 )
@@ -713,7 +715,7 @@ private fun VGroupRow(group: TargetGroup, onSelected: (Long, Boolean) -> Unit) {
                 Text(
                     group.name,
                     color = VText,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -724,7 +726,7 @@ private fun VGroupRow(group: TargetGroup, onSelected: (Long, Boolean) -> Unit) {
                     if (!group.activityText.isNullOrBlank()) add(group.activityText!!)
                 }.joinToString(" • ")
                 if (meta.isNotBlank()) {
-                    Text(meta, color = VMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(meta, color = VMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -768,7 +770,7 @@ fun V341ScanScreen(
                     value = text,
                     onValueChange = { text = it.take(16000) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 115.dp),
-                    placeholder = { Text("أدخل كل رابط في سطر جديد...", color = VMuted, fontSize = 11.sp) },
+                    placeholder = { Text("أدخل كل رابط في سطر جديد...", color = VMuted, fontSize = 13.sp) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = VCyan,
                         unfocusedBorderColor = VLine,
@@ -784,12 +786,12 @@ fun V341ScanScreen(
                         enabled = text.isNotBlank(),
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(1.dp, VCyan)
-                    ) { Text("إضافة", color = VText, fontSize = 10.sp) }
+                    ) { Text("إضافة", color = VText, fontSize = 12.sp) }
                     OutlinedButton(onClick = onImportFile, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VBlue)) {
-                        Text("ملف", color = VText, fontSize = 10.sp)
+                        Text("ملف", color = VText, fontSize = 12.sp)
                     }
                     OutlinedButton(onClick = onImportExtraction, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, VPurple)) {
-                        Text("الاستخراج", color = VText, fontSize = 10.sp)
+                        Text("الاستخراج", color = VText, fontSize = 12.sp)
                     }
                 }
             }
@@ -909,7 +911,7 @@ fun V341PublishScreen(
                         Text("اختيار القروبات", color = VText)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text("$publishable قروب قابل للنشر", color = VCyan, fontSize = 10.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text("$publishable قروب قابل للنشر", color = VCyan, fontSize = 12.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                 }
             }
         }

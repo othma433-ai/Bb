@@ -98,13 +98,8 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
     val runtimeTarget by viewModel.runtimeTarget.collectAsState()
     val remoteRuntimeTargets by viewModel.remoteRuntimeTargets.collectAsState()
     val joinState by joinCoordinator.state.collectAsState()
-    val groups by viewModel.groups.collectAsState()
-    val links by viewModel.links.collectAsState()
-    val logs by viewModel.logs.collectAsState()
     val scanState by viewModel.scanState.collectAsState()
-    val scanItems by viewModel.scanItems.collectAsState()
     val publishState by viewModel.publishState.collectAsState()
-    val publishItems by viewModel.publishItems.collectAsState()
     var screen by remember { mutableStateOf(AppScreen.HOME) }
     var pendingFormat by remember { mutableStateOf(ExportFormat.XLSX) }
     var showSettings by remember { mutableStateOf(false) }
@@ -120,8 +115,8 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
 
     LaunchedEffect(engine.accessibilityEnabledInSettings, engine.serviceConnected) {
         if (engine.accessibilityEnabledInSettings && !engine.serviceConnected) {
-            repeat(20) {
-                delay(400L)
+            repeat(4) {
+                delay(1_000L)
                 viewModel.refreshRuntimeEnvironment()
                 if (viewModel.engineState.value.serviceConnected) return@LaunchedEffect
             }
@@ -129,13 +124,13 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
     }
 
     val createDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
-        if (uri != null) runCatching { ExportManager.export(context.contentResolver, uri, pendingFormat, links) }
+        if (uri != null) runCatching { ExportManager.export(context.contentResolver, uri, pendingFormat, viewModel.links.value) }
     }
     val createScanDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
-        if (uri != null) runCatching { ExportManager.exportScan(context.contentResolver, uri, pendingFormat, scanItems) }
+        if (uri != null) runCatching { ExportManager.exportScan(context.contentResolver, uri, pendingFormat, viewModel.scanItems.value) }
     }
     val createPublishDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
-        if (uri != null) runCatching { ExportManager.exportPublish(context.contentResolver, uri, pendingFormat, publishItems) }
+        if (uri != null) runCatching { ExportManager.exportPublish(context.contentResolver, uri, pendingFormat, viewModel.publishItems.value) }
     }
 
     val openGroupFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -253,185 +248,209 @@ private fun ExtractorAppUi(viewModel: AppViewModel, joinCoordinator: OriginalJoi
                 V341BottomBar(current = screen) { target ->
                     screen = target
                     when (target) {
-                        AppScreen.RESULTS -> viewModel.reloadLinks()
-                        AppScreen.GROUPS -> viewModel.refresh()
-                        AppScreen.PUBLISH -> viewModel.reloadPublishItems()
-                        AppScreen.SCAN -> viewModel.importScanLinksFromExtraction()
-                        AppScreen.JOIN -> joinCoordinator.refresh()
-                        AppScreen.LOGS -> viewModel.reloadLogs()
-                        else -> Unit
+                        AppScreen.RESULTS -> {
+    viewModel.reloadLinks()
+                            AppScreen.GROUPS -> {
+        viewModel.refresh()
+                                AppScreen.PUBLISH -> {
+            viewModel.reloadPublishItems()
+                                    AppScreen.SCAN -> {
+                viewModel.importScanLinksFromExtraction()
+                                        AppScreen.JOIN -> joinCoordinator.refresh()
+                                        AppScreen.LOGS -> viewModel.reloadLogs()
+                                        else -> Unit
+                                    }
+                                }
+                            }
+                        }
+                    ) { scaffoldPadding ->
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            val zero = PaddingValues(
+                                top = scaffoldPadding.calculateTopPadding(),
+                                bottom = scaffoldPadding.calculateBottomPadding()
+                            )
+                            when (screen) {
+                                AppScreen.HOME -> V341HomeScreen(
+                                    padding = zero,
+                                    engine = engine,
+                                    runtime = runtimeTarget,
+                                    scan = scanState,
+                                    publish = publishState,
+                                    onExtract = { screen = AppScreen.EXTRACT },
+                                    onScan = { viewModel.importScanLinksFromExtraction(); screen = AppScreen.SCAN },
+                                    onPublish = { viewModel.reloadPublishItems(); screen = AppScreen.PUBLISH },
+                                    onAutoJoin = { screen = AppScreen.JOIN },
+                                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                                    onBackendPreference = viewModel::setRuntimeBackendPreference,
+                                    remoteTargets = remoteRuntimeTargets,
+                                    onDiscoverRemoteTargets = viewModel::discoverRemoteRuntimeTargets,
+                                    onRefreshTargets = viewModel::refreshTargetCatalog,
+                                    onRemoteTarget = viewModel::setRemoteRuntimeTarget,
+                                    onStart = viewModel::startExtractionSmart,
+                                    onPause = viewModel::pauseActiveOperation,
+                                    onResume = viewModel::resumeActiveOperation,
+                                    onStopAll = viewModel::stopAllOperations,
+                                    onSettings = { screen = AppScreen.SETTINGS }
+                                )
+
+                                AppScreen.EXTRACT -> {
+                                    val groups by viewModel.groups.collectAsState()
+                    V341ExtractionScreen(
+                                        padding = zero,
+                                        engine = engine,
+                                        runtime = runtimeTarget,
+                                        groups = groups,
+                                        accessibilityEnabled = isAccessibilityServiceEnabled(context),
+                                        onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                                        onBackendPreference = viewModel::setRuntimeBackendPreference,
+                                        onMode = viewModel::setMode,
+                                        onSpeed = viewModel::setSpeed,
+                                        onRounds = viewModel::setMaxRounds,
+                                        onSync = viewModel::syncGroups,
+                                        onSelected = viewModel::setSelected,
+                                        onPreset = viewModel::applyGroupSelectionPreset,
+                                        onGroups = { screen = AppScreen.GROUPS },
+                                        onResults = { viewModel.reloadLinks(); screen = AppScreen.RESULTS },
+                                        onStart = viewModel::startExtractionSmart,
+                                        onPause = viewModel::pauseActiveOperation,
+                                        onResume = viewModel::resumeActiveOperation,
+                                        onStopAll = viewModel::stopAllOperations,
+                                        onOpenWhatsApp = { ExtractionController.openWhatsApp() }
+                                    )
+                                }
+
+                                AppScreen.JOIN -> ProfessionalJoinScreen(
+                                    padding = zero,
+                                    engine = engine,
+                                    runtime = runtimeTarget,
+                                    join = joinState,
+                                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                                    onBackendPreference = viewModel::setRuntimeBackendPreference,
+                                    onDraft = joinCoordinator::setDraft,
+                                    onImportFile = {
+                                        openJoinFile.launch(
+                                            arrayOf(
+                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                "application/vnd.ms-excel",
+                                                "text/csv",
+                                                "text/plain",
+                                                "application/octet-stream"
+                                            )
+                                        )
+                                    },
+                                    onStart = joinCoordinator::start,
+                                    onPause = joinCoordinator::pause,
+                                    onResume = joinCoordinator::resume,
+                                    onStop = joinCoordinator::stop
+                                )
+
+                                AppScreen.SCAN -> {
+                                    val scanItems by viewModel.scanItems.collectAsState()
+                                    ProfessionalScanScreen(
+                                    padding = zero,
+                                    engine = engine,
+                                    runtime = runtimeTarget,
+                                    scan = scanState,
+                                    scanItems = scanItems,
+                                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                                    onBackendPreference = viewModel::setRuntimeBackendPreference,
+                                    onAddLinks = viewModel::addScanLinks,
+                                    onImportExtraction = viewModel::importScanLinksFromExtraction,
+                                    onImportFile = {
+                                        openScanFile.launch(
+                                            arrayOf(
+                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                "application/vnd.ms-excel",
+                                                "text/csv",
+                                                "text/plain",
+                                                "application/octet-stream"
+                                            )
+                                        )
+                                    },
+                                    onSpeed = viewModel::setScanSpeed,
+                                    onAttempts = viewModel::setScanMaxAttempts,
+                                    onStart = viewModel::startScanWithInput,
+                                    onPause = viewModel::pauseActiveOperation,
+                                    onResume = viewModel::resumeActiveOperation,
+                                    onStop = viewModel::stopAllOperations,
+                                    onClear = viewModel::clearScan,
+                                    onExport = { format ->
+                                        pendingFormat = format
+                                        createScanDocument.launch("AL-thmany-scan.${format.extension}")
+                                    }
+                                )
+                            }
+                                }
+
+                            AppScreen.PUBLISH -> {
+                                val groups by viewModel.groups.collectAsState()
+                                V341PublishScreen(
+                                padding = zero,
+                                engine = engine,
+                                runtime = runtimeTarget,
+                                publish = publishState,
+                                groups = groups,
+                                onTargetWhatsApp = viewModel::setTargetWhatsApp,
+                                onBackendPreference = viewModel::setRuntimeBackendPreference,
+                                onGroups = { screen = AppScreen.GROUPS },
+                                onDraft = viewModel::setPublishDraft,
+                                onContentMode = viewModel::setPublishContentMode,
+                                onPickAttachment = { mode ->
+                                    val types = if (mode == PublishContentMode.IMAGE_WITH_CAPTION) arrayOf("image/*") else arrayOf("text/x-vcard", "text/vcard", "text/plain", "*/*")
+                                    pickPublishAttachment.launch(types)
+                                },
+                                onClearAttachment = { viewModel.setPublishAttachment(null, null) },
+                                onSpeed = viewModel::setPublishSpeed,
+                                onNavigation = viewModel::setPublishNavigationMode,
+                                onAttempts = viewModel::setPublishMaxAttempts,
+                                onStart = viewModel::startPublishSmart,
+                                onPause = viewModel::pauseActiveOperation,
+                                onResume = viewModel::resumeActiveOperation,
+                                onStopAll = viewModel::stopAllOperations,
+                                onExport = { format ->
+                                    pendingFormat = format
+                                    createPublishDocument.launch("AL-thmany-publish.${format.extension}")
+                                }
+                            )
+                        }
+                            }
+
+                        AppScreen.GROUPS -> {
+                            val groups by viewModel.groups.collectAsState()
+                            WorkspaceGroupsScreen(
+                            padding = zero,
+                            engine = engine,
+                            groups = groups.filter { group ->
+                                val selectedPackage = engine.selectedWhatsAppPackage
+                                selectedPackage == null || group.whatsappPackage.isBlank() || group.whatsappPackage == selectedPackage
+                            },
+                            syncing = engine.status == com.althmany.extractor.data.EngineStatus.SYNCING_GROUPS,
+                            syncFound = engine.syncFound,
+                            onSync = viewModel::syncGroups,
+                            onSelected = viewModel::setSelected,
+                            onPreset = viewModel::applyGroupSelectionPreset,
+                            onStartExtraction = { screen = AppScreen.EXTRACT; viewModel.startExtractionSmart() },
+                            onPause = viewModel::pauseActiveOperation,
+                            onResume = viewModel::resumeActiveOperation,
+                            onStopAll = viewModel::stopAllOperations
+                        )
                     }
+                        }
+
+                    AppScreen.RESULTS -> {
+                        val links by viewModel.links.collectAsState()
+                        ResultsScreen(
+                        padding = zero,
+                        links = links,
+                        onRefresh = viewModel::reloadLinks,
+                        onExport = { format ->
+                            pendingFormat = format
+                            createDocument.launch("AL-thmany-links.${format.extension}")
+                        },
+                        onClearAll = viewModel::clearAll
+                    )
                 }
-            }
-        }
-    ) { scaffoldPadding ->
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            val zero = PaddingValues(
-                top = scaffoldPadding.calculateTopPadding(),
-                bottom = scaffoldPadding.calculateBottomPadding()
-            )
-            when (screen) {
-                AppScreen.HOME -> V341HomeScreen(
-                    padding = zero,
-                    engine = engine,
-                    runtime = runtimeTarget,
-                    scan = scanState,
-                    publish = publishState,
-                    onExtract = { screen = AppScreen.EXTRACT },
-                    onScan = { viewModel.importScanLinksFromExtraction(); screen = AppScreen.SCAN },
-                    onPublish = { viewModel.reloadPublishItems(); screen = AppScreen.PUBLISH },
-                    onAutoJoin = { screen = AppScreen.JOIN },
-                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
-                    onBackendPreference = viewModel::setRuntimeBackendPreference,
-                    remoteTargets = remoteRuntimeTargets,
-                    onDiscoverRemoteTargets = viewModel::discoverRemoteRuntimeTargets,
-                    onRemoteTarget = viewModel::setRemoteRuntimeTarget,
-                    onStart = viewModel::startExtractionSmart,
-                    onPause = viewModel::pauseActiveOperation,
-                    onResume = viewModel::resumeActiveOperation,
-                    onStopAll = viewModel::stopAllOperations,
-                    onSettings = { screen = AppScreen.SETTINGS }
-                )
-
-                AppScreen.EXTRACT -> V341ExtractionScreen(
-                    padding = zero,
-                    engine = engine,
-                    runtime = runtimeTarget,
-                    groups = groups,
-                    accessibilityEnabled = isAccessibilityServiceEnabled(context),
-                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
-                    onBackendPreference = viewModel::setRuntimeBackendPreference,
-                    onMode = viewModel::setMode,
-                    onSpeed = viewModel::setSpeed,
-                    onRounds = viewModel::setMaxRounds,
-                    onSync = viewModel::syncGroups,
-                    onSelected = viewModel::setSelected,
-                    onPreset = viewModel::applyGroupSelectionPreset,
-                    onGroups = { screen = AppScreen.GROUPS },
-                    onResults = { viewModel.reloadLinks(); screen = AppScreen.RESULTS },
-                    onStart = viewModel::startExtractionSmart,
-                    onPause = viewModel::pauseActiveOperation,
-                    onResume = viewModel::resumeActiveOperation,
-                    onStopAll = viewModel::stopAllOperations,
-                    onOpenWhatsApp = { ExtractionController.openWhatsApp() }
-                )
-
-                AppScreen.JOIN -> ProfessionalJoinScreen(
-                    padding = zero,
-                    engine = engine,
-                    runtime = runtimeTarget,
-                    join = joinState,
-                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
-                    onBackendPreference = viewModel::setRuntimeBackendPreference,
-                    onDraft = joinCoordinator::setDraft,
-                    onImportFile = {
-                        openJoinFile.launch(
-                            arrayOf(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                "application/vnd.ms-excel",
-                                "text/csv",
-                                "text/plain",
-                                "application/octet-stream"
-                            )
-                        )
-                    },
-                    onStart = joinCoordinator::start,
-                    onPause = joinCoordinator::pause,
-                    onResume = joinCoordinator::resume,
-                    onStop = joinCoordinator::stop
-                )
-
-                AppScreen.SCAN -> ProfessionalScanScreen(
-                    padding = zero,
-                    engine = engine,
-                    runtime = runtimeTarget,
-                    scan = scanState,
-                    scanItems = scanItems,
-                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
-                    onBackendPreference = viewModel::setRuntimeBackendPreference,
-                    onAddLinks = viewModel::addScanLinks,
-                    onImportExtraction = viewModel::importScanLinksFromExtraction,
-                    onImportFile = {
-                        openScanFile.launch(
-                            arrayOf(
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                "application/vnd.ms-excel",
-                                "text/csv",
-                                "text/plain",
-                                "application/octet-stream"
-                            )
-                        )
-                    },
-                    onSpeed = viewModel::setScanSpeed,
-                    onAttempts = viewModel::setScanMaxAttempts,
-                    onStart = viewModel::startScanWithInput,
-                    onPause = viewModel::pauseActiveOperation,
-                    onResume = viewModel::resumeActiveOperation,
-                    onStop = viewModel::stopAllOperations,
-                    onClear = viewModel::clearScan,
-                    onExport = { format ->
-                        pendingFormat = format
-                        createScanDocument.launch("AL-thmany-scan.${format.extension}")
                     }
-                )
-
-                AppScreen.PUBLISH -> V341PublishScreen(
-                    padding = zero,
-                    engine = engine,
-                    runtime = runtimeTarget,
-                    publish = publishState,
-                    groups = groups,
-                    onTargetWhatsApp = viewModel::setTargetWhatsApp,
-                    onBackendPreference = viewModel::setRuntimeBackendPreference,
-                    onGroups = { screen = AppScreen.GROUPS },
-                    onDraft = viewModel::setPublishDraft,
-                    onContentMode = viewModel::setPublishContentMode,
-                    onPickAttachment = { mode ->
-                        val types = if (mode == PublishContentMode.IMAGE_WITH_CAPTION) arrayOf("image/*") else arrayOf("text/x-vcard", "text/vcard", "text/plain", "*/*")
-                        pickPublishAttachment.launch(types)
-                    },
-                    onClearAttachment = { viewModel.setPublishAttachment(null, null) },
-                    onSpeed = viewModel::setPublishSpeed,
-                    onNavigation = viewModel::setPublishNavigationMode,
-                    onAttempts = viewModel::setPublishMaxAttempts,
-                    onStart = viewModel::startPublishSmart,
-                    onPause = viewModel::pauseActiveOperation,
-                    onResume = viewModel::resumeActiveOperation,
-                    onStopAll = viewModel::stopAllOperations,
-                    onExport = { format ->
-                        pendingFormat = format
-                        createPublishDocument.launch("AL-thmany-publish.${format.extension}")
-                    }
-                )
-
-                AppScreen.GROUPS -> WorkspaceGroupsScreen(
-                    padding = zero,
-                    engine = engine,
-                    groups = groups.filter { group ->
-                        val selectedPackage = engine.selectedWhatsAppPackage
-                        selectedPackage == null || group.whatsappPackage.isBlank() || group.whatsappPackage == selectedPackage
-                    },
-                    syncing = engine.status == com.althmany.extractor.data.EngineStatus.SYNCING_GROUPS,
-                    syncFound = engine.syncFound,
-                    onSync = viewModel::syncGroups,
-                    onSelected = viewModel::setSelected,
-                    onPreset = viewModel::applyGroupSelectionPreset,
-                    onStartExtraction = { screen = AppScreen.EXTRACT; viewModel.startExtractionSmart() },
-                    onPause = viewModel::pauseActiveOperation,
-                    onResume = viewModel::resumeActiveOperation,
-                    onStopAll = viewModel::stopAllOperations
-                )
-
-                AppScreen.RESULTS -> ResultsScreen(
-                    padding = zero,
-                    links = links,
-                    onRefresh = viewModel::reloadLinks,
-                    onExport = { format ->
-                        pendingFormat = format
-                        createDocument.launch("AL-thmany-links.${format.extension}")
-                    },
-                    onClearAll = viewModel::clearAll
-                )
 
                 AppScreen.LOGS -> V341DiagnosticsScreen(zero) { screen = AppScreen.SETTINGS }
 

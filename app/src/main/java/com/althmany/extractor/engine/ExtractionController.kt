@@ -89,7 +89,7 @@ object ExtractionController {
             maxSameGroupRetries = prefs.maxSameGroupRetries,
             betweenItemsDelayMs = prefs.betweenItemsDelayMs
         )
-        refreshRuntimeEnvironment()
+        refreshRuntimeEnvironment(forceDiscovery = true)
         refreshStats()
     }
 
@@ -134,10 +134,10 @@ object ExtractionController {
             ?.substringBefore('/')
     }
 
-    fun refreshRuntimeEnvironment() {
+    fun refreshRuntimeEnvironment(forceDiscovery: Boolean = false) {
         if (!::appContext.isInitialized || !::settingsStore.isInitialized) return
         val profile = RuntimeProfileDetector.detect(appContext)
-        val localAvailable = WhatsAppInstanceRegistry.launchable(appContext, forceRefresh = true)
+        val localAvailable = WhatsAppInstanceRegistry.launchable(appContext, forceRefresh = forceDiscovery)
         val remote = UnifiedRuntimeTargetStore.isRemoteTarget(appContext)
         val remotePackage = UnifiedRuntimeTargetStore.selectedPackage(appContext)
         val remoteUserId = UnifiedRuntimeTargetStore.selectedAndroidUserId(appContext)
@@ -472,7 +472,10 @@ object ExtractionController {
 
     fun refreshStats() {
         if (!::repository.isInitialized) return
-        scope.launch { _state.value = _state.value.copy(stats = repository.stats()) }
+        scope.launch {
+            val stats = kotlinx.coroutines.withContext(Dispatchers.IO) { repository.stats() }
+            _state.value = _state.value.copy(stats = stats)
+        }
     }
 
     /**

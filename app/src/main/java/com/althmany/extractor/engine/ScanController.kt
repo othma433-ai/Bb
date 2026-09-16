@@ -295,7 +295,10 @@ object ScanController {
 
     fun refreshStats() {
         if (!::repository.isInitialized) return
-        scope.launch { _state.value = _state.value.copy(stats = repository.scanStats()) }
+        scope.launch {
+            val stats = kotlinx.coroutines.withContext(Dispatchers.IO) { repository.scanStats() }
+            _state.value = _state.value.copy(stats = stats)
+        }
     }
 
     private suspend fun runScan() {

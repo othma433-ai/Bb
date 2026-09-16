@@ -74,7 +74,7 @@ class OriginalJoinCoordinator(
         scope.launch {
             while (isActive) {
                 refresh()
-                delay(350L)
+                delay(700L)
             }
         }
     }

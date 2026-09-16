@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
 errors = []
@@ -21,14 +22,35 @@ diag = read("app/src/main/java/com/althmany/extractor/ui/V341DiagnosticsScreen.k
 preview = read("app/src/main/java/com/althmany/extractor/ui/LinkPreviewPolicy.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
 
-join_start = main.find("AppScreen.JOIN -> ProfessionalJoinScreen(")
-scan_start = main.find("AppScreen.SCAN -> ProfessionalScanScreen(", join_start + 1)
+def screen_block_containing(screen, needle):
+    pattern = re.compile(
+        rf"(?m)^[ \t]*AppScreen\.{screen}[ \t]*->[ \t]*"
+    )
 
-join_block = (
-    main[join_start:scan_start]
-    if join_start >= 0 and scan_start > join_start
-    else ""
-)
+    matches = list(pattern.finditer(main))
+
+    for index, match in enumerate(matches):
+        next_match = re.search(
+            r"(?m)^[ \t]*AppScreen\.[A-Z_]+[ \t]*->[ \t]*",
+            main[match.end():]
+        )
+
+        block_end = (
+            match.end() + next_match.start()
+            if next_match
+            else len(main)
+        )
+
+        block = main[match.start():block_end]
+
+        if needle in block:
+            return block
+
+    return ""
+
+
+join_block = screen_block_containing("JOIN", "ProfessionalJoinScreen(")
+scan_block = screen_block_containing("SCAN", "ProfessionalScanScreen(")
 
 checks = {
     "new workspace launcher": (
@@ -55,14 +77,13 @@ checks = {
         and "عرض أقل" in professional
     ),
     "professional join wired": (
-        join_start >= 0
-        and scan_start > join_start
+        "ProfessionalJoinScreen(" in join_block
         and "join = joinState" in join_block
         and "onStart = joinCoordinator::start" in join_block
         and "scan = scanState" not in join_block
     ),
     "professional scan wired":
-        "AppScreen.SCAN -> ProfessionalScanScreen(" in main,
+        "ProfessionalScanScreen(" in scan_block,
     "member count displayed safely": (
         "memberCountText" in professional
         and "عدد الأعضاء غير متاح" in professional

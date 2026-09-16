@@ -74,7 +74,7 @@ private fun PSectionTitle(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = PText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = PText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(7.dp))
         Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
     }
@@ -116,7 +116,7 @@ private fun PHeader(
                 Text(
                     subtitle,
                     color = PMuted,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.End
                 )
             }
@@ -144,7 +144,7 @@ private fun PChoice(
             Text(
                 text,
                 color = if (selected) tint else PText,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2
@@ -171,7 +171,7 @@ private fun PStat(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(value, color = tint, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-            Text(label, color = PText, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2)
+            Text(label, color = PText, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2)
         }
     }
 }
@@ -198,7 +198,7 @@ private fun PCompactLinkEditor(
                         "${index + 1}. $line",
                         color = PText,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Start,
@@ -227,7 +227,7 @@ private fun PCompactLinkEditor(
                 Text(
                     placeholder,
                     color = PMuted,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.End
                 )
             },
@@ -300,7 +300,7 @@ private fun PControl(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(icon, null, tint = if (enabled) tint else PMuted, modifier = Modifier.size(18.dp))
-            Text(label, color = if (enabled) PText else PMuted, fontSize = 9.sp, textAlign = TextAlign.Center)
+            Text(label, color = if (enabled) PText else PMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
     }
 }
@@ -386,7 +386,7 @@ fun ProfessionalJoinScreen(
                     Text(
                         "المحرك: ${join.backend} • التقدم: ${join.progressPercent}% • الرابط: ${join.currentPosition ?: "—"}/${join.total}",
                         color = PMuted,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -394,7 +394,7 @@ fun ProfessionalJoinScreen(
                     Text(
                         join.message,
                         color = PText,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -461,7 +461,7 @@ private fun PScanResultRow(item: ScanRecord) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("${item.confidence}%", color = tint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("${item.confidence}%", color = tint, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Text(item.status.labelAr, color = tint, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(4.dp))
@@ -476,13 +476,13 @@ private fun PScanResultRow(item: ScanRecord) {
             Text(
                 "${item.inviteKind.labelAr} • ${item.memberCountText ?: "عدد الأعضاء غير متاح"}",
                 color = PMuted,
-                fontSize = 10.sp
+                fontSize = 12.sp
             )
             Text(
                 item.normalizedUrl,
                 color = PMuted,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
@@ -564,19 +564,19 @@ fun ProfessionalScanScreen(
                             enabled = text.isNotBlank(),
                             modifier = Modifier.weight(1f),
                             border = BorderStroke(1.dp, PCyan)
-                        ) { Text("إضافة", color = PText, fontSize = 10.sp) }
+                        ) { Text("إضافة", color = PText, fontSize = 12.sp) }
 
                         OutlinedButton(
                             onClick = onImportFile,
                             modifier = Modifier.weight(1f),
                             border = BorderStroke(1.dp, PBlue)
-                        ) { Text("ملف", color = PText, fontSize = 10.sp) }
+                        ) { Text("ملف", color = PText, fontSize = 12.sp) }
 
                         OutlinedButton(
                             onClick = onImportExtraction,
                             modifier = Modifier.weight(1f),
                             border = BorderStroke(1.dp, PPurple)
-                        ) { Text("من الاستخراج", color = PText, fontSize = 10.sp) }
+                        ) { Text("من الاستخراج", color = PText, fontSize = 12.sp) }
                     }
                 }
             }
@@ -588,7 +588,7 @@ fun ProfessionalScanScreen(
                     Text(
                         "التصنيف فقط: لن يضغط التطبيق «انضمام» أو «طلب انضمام».",
                         color = PText,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -610,7 +610,7 @@ fun ProfessionalScanScreen(
                     Text(
                         "عدد محاولات التحقق",
                         color = PMuted,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -638,7 +638,7 @@ fun ProfessionalScanScreen(
                     Text(
                         "${scan.status.name} • ${scan.currentIndex}/${scan.total} • ثقة ${scan.currentConfidence}%",
                         color = PMuted,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -646,7 +646,7 @@ fun ProfessionalScanScreen(
                     Text(
                         scan.message,
                         color = PText,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.End
                     )
@@ -680,7 +680,7 @@ fun ProfessionalScanScreen(
                             Text(
                                 "يتم عرض أحدث 20 نتيجة من ${scanItems.size}",
                                 color = PMuted,
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.End
                             )

@@ -127,7 +127,7 @@ object UnifiedRuntimeTargetStore {
     ): UnifiedRuntimeSnapshot {
         val appContext = context.applicationContext
         val profile = RuntimeProfileDetector.detect(appContext)
-        val available = WhatsAppInstanceRegistry.available(appContext, forceRefresh = true)
+        val available = WhatsAppInstanceRegistry.available(appContext, forceRefresh = false)
         val storedPackage = selectedPackage(appContext)
         val storedRemote = isRemoteTarget(appContext)
         val selectedPackage = if (storedRemote) {
@@ -261,7 +261,7 @@ object UnifiedRuntimeTargetStore {
 
         val users = (normalPairs + personaPairs).distinctBy { it.first }
         val host = currentProcessUserId()
-        val packages = listOf(
+        val knownPackages = setOf(
             WhatsAppInstanceRegistry.WHATSAPP,
             WhatsAppInstanceRegistry.WHATSAPP_BUSINESS,
             WhatsAppInstanceRegistry.WHATSAPP_CLONED
@@ -281,25 +281,35 @@ object UnifiedRuntimeTargetStore {
 
             val environment = classifyEnvironment(userId, rawName, secureMarker)
 
-            for (packageName in packages) {
-                val packageResult = ShizukuBridge.execute(
-                    appContext,
-                    "{ pm list packages --user $userId $packageName 2>/dev/null; " +
-                        "cmd package list packages --user $userId $packageName 2>/dev/null; }",
-                    2_500
-                )
-                val exactPresent = packageResult.output.lineSequence()
-                    .map(String::trim)
-                    .any { it == "package:$packageName" }
-
-                if (exactPresent) {
-                    found += UnifiedRemoteTarget(
-                        androidUserId = userId,
-                        environmentLabel = environment,
-                        packageName = packageName,
-                        whatsappLabel = WhatsAppInstanceRegistry.labelFor(packageName)
-                    )
+            val packageListResult = ShizukuBridge.execute(
+                appContext,
+                "{ pm list packages --user $userId 2>/dev/null; " +
+                    "cmd package list packages --user $userId 2>/dev/null; }",
+                3_500
+            )
+            val remotePackages = packageListResult.output.lineSequence()
+                .map(String::trim)
+                .mapNotNull { line ->
+                    line.takeIf { it.startsWith("package:") }
+                        ?.removePrefix("package:")
+                        ?.substringBefore(' ')
+                        ?.trim()
+                        ?.takeIf(String::isNotBlank)
                 }
+                .filter { packageName ->
+                    packageName in knownPackages ||
+                        packageName.contains("whatsapp", ignoreCase = true)
+                }
+                .distinct()
+                .toList()
+
+            for (packageName in remotePackages) {
+                found += UnifiedRemoteTarget(
+                    androidUserId = userId,
+                    environmentLabel = environment,
+                    packageName = packageName,
+                    whatsappLabel = WhatsAppInstanceRegistry.labelFor(packageName)
+                )
             }
         }
 
